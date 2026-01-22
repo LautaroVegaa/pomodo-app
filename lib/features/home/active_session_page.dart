@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/app_theme.dart';
 import '../../app/pomodoro_scope.dart';
+import '../../app/settings_scope.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
 import '../settings/settings_page.dart';
 import '../shared/widgets/app_bottom_nav.dart';
+import '../shared/widgets/animated_progress_bar.dart';
 import '../shared/widgets/stop_session_dialog.dart';
 import '../stats/stats_page.dart';
 
@@ -15,42 +18,75 @@ class ActiveSessionPage extends StatelessWidget {
   Future<void> _handleStop(
     BuildContext context,
     PomodoroController controller,
+    bool hapticsEnabled,
   ) async {
     final bool? confirmed = await showStopSessionDialog(context);
     if (confirmed == true) {
       controller.stopConfirmed();
+      if (hapticsEnabled) {
+        HapticFeedback.heavyImpact();
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final PomodoroController controller = PomodoroScope.of(context);
+    final settings = SettingsScope.of(context);
     final SessionType sessionType = controller.sessionType;
     final RunState runState = controller.runState;
     final bool isFocus = sessionType == SessionType.focus;
     final bool isRunning = runState == RunState.running;
-    final bool isPaused = runState == RunState.paused;
 
-    final Color timerColor = AppColors.textPrimary.withValues(
-      alpha: isRunning ? 1.0 : 0.7,
-    );
-    final Color progressColor = isFocus
+    final Color timerColor = AppColors.textPrimary;
+    final double timerOpacity = isRunning ? 1.0 : 0.65;
+    final Color progressFill = isFocus
         ? AppColors.accentBlue
-        : AppColors.accentBlue.withValues(alpha: 0.65);
-    final String statusText = isPaused
-        ? 'Paused'
-        : isFocus
-        ? 'Focus'
-        : 'Break';
+        : AppColors.accentBlue.withValues(alpha: 0.72);
+    final Color progressGlow = isFocus
+        ? AppColors.accentBlue.withValues(alpha: 0.42)
+        : AppColors.accentBlue.withValues(alpha: 0.28);
+    final Color progressBackground = Colors.white.withValues(
+      alpha: isFocus ? 0.08 : 0.06,
+    );
+    final int remainingSeconds = controller.remainingSeconds;
+    final int transitionSeed = sessionType == SessionType.focus
+        ? controller.cycleCount * 2
+        : controller.cycleCount * 2 + 1;
     final String labelText = isFocus ? 'Focus' : 'Break';
     final String motivational = isFocus
         ? 'Stay with one thing.'
         : 'Breathe. Then begin again.';
 
+    void handlePrimaryTap() {
+      switch (runState) {
+        case RunState.running:
+          controller.pause();
+          if (settings.hapticsEnabled) {
+            HapticFeedback.selectionClick();
+          }
+          break;
+        case RunState.paused:
+          controller.resume();
+          if (settings.hapticsEnabled) {
+            HapticFeedback.selectionClick();
+          }
+          break;
+        case RunState.idle:
+          controller.start();
+          if (settings.hapticsEnabled) {
+            HapticFeedback.lightImpact();
+          }
+          break;
+      }
+    }
+
     return OnboardingScaffold(
       child: Stack(
         children: [
-          const Positioned.fill(child: _LowerAura()),
+          Positioned.fill(
+            child: _LowerAura(sessionType: sessionType),
+          ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -61,32 +97,42 @@ class ActiveSessionPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _StatusPill(label: statusText),
+                    _StatusPill(sessionType: sessionType, runState: runState),
                     const Spacer(flex: 2),
                     _TimerReadout(
                       timeText: controller.formattedRemaining,
                       timerColor: timerColor,
+                      opacity: timerOpacity,
+                      remainingSeconds: remainingSeconds,
                     ),
                     const SizedBox(height: 12),
                     _SessionLabel(text: labelText),
                     const SizedBox(height: 20),
-                    _SessionProgressBar(
+                    AnimatedProgressBar(
                       progress: controller.progress,
-                      color: progressColor,
+                      backgroundColor: progressBackground,
+                      fillColor: progressFill,
+                      glowColor: progressGlow,
+                      height: 6,
+                      sessionTrigger: transitionSeed,
                     ),
                     const SizedBox(height: 40),
                     _SessionControls(
                       runState: runState,
-                      onPrimaryTap: controller.togglePause,
-                      onStopTap: () => _handleStop(context, controller),
+                      onPrimaryTap: handlePrimaryTap,
+                      onStopTap: () => _handleStop(
+                        context,
+                        controller,
+                        settings.hapticsEnabled,
+                      ),
                     ),
                     const SizedBox(height: 14),
                     Text(
                       controller.durationSummary,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textPrimary.withValues(alpha: 0.6),
-                        letterSpacing: 0.2,
-                      ),
+                            color: AppColors.textPrimary.withValues(alpha: 0.6),
+                            letterSpacing: 0.2,
+                          ),
                       textAlign: TextAlign.center,
                     ),
                     const Spacer(flex: 3),
@@ -151,16 +197,30 @@ class _SessionHeader extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label});
+  const _StatusPill({required this.sessionType, required this.runState});
 
-  final String label;
+  final SessionType sessionType;
+  final RunState runState;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final bool isFocus = sessionType == SessionType.focus;
+    final bool isPaused = runState == RunState.paused;
+    final String label = isPaused
+        ? 'Paused'
+        : isFocus
+            ? 'Focus'
+            : 'Break';
+    final Color color = isPaused
+        ? Colors.white.withValues(alpha: 0.05)
+        : isFocus
+            ? Colors.white.withValues(alpha: 0.1)
+            : AppColors.accentBlue.withValues(alpha: 0.12);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
+        color: color,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
@@ -174,24 +234,47 @@ class _StatusPill extends StatelessWidget {
 }
 
 class _TimerReadout extends StatelessWidget {
-  const _TimerReadout({required this.timeText, required this.timerColor});
+  const _TimerReadout({
+    required this.timeText,
+    required this.timerColor,
+    required this.opacity,
+    required this.remainingSeconds,
+  });
 
   final String timeText;
   final Color timerColor;
+  final double opacity;
+  final int remainingSeconds;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          timeText,
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.displayLarge?.copyWith(
-            fontSize: 92,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -3,
-            color: timerColor,
+        TweenAnimationBuilder<double>(
+          key: ValueKey<int>(remainingSeconds),
+          tween: Tween<double>(begin: 0.97, end: 1.0),
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOut,
+          builder: (context, scale, child) {
+            return Transform.scale(
+              scale: scale,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: opacity,
+                child: child,
+              ),
+            );
+          },
+          child: Text(
+            timeText,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                  fontSize: 92,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -3,
+                  color: timerColor,
+                ),
           ),
         ),
       ],
@@ -213,35 +296,6 @@ class _SessionLabel extends StatelessWidget {
         letterSpacing: 0.6,
       ),
       textAlign: TextAlign.center,
-    );
-  }
-}
-
-class _SessionProgressBar extends StatelessWidget {
-  const _SessionProgressBar({required this.progress, required this.color});
-
-  final double progress;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      height: 6,
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      alignment: Alignment.centerLeft,
-      child: FractionallySizedBox(
-        widthFactor: progress.clamp(0.0, 1.0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: BorderRadius.circular(3),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -309,34 +363,66 @@ class _CircleButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
-        child: Icon(icon, color: iconColor, size: 30),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.85, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                ),
+                child: child,
+              ),
+            );
+          },
+          child: Icon(
+            icon,
+            key: ValueKey<int>(icon.codePoint ^ backgroundColor.hashCode),
+            color: iconColor,
+            size: 30,
+          ),
+        ),
       ),
     );
   }
 }
 
 class _LowerAura extends StatelessWidget {
-  const _LowerAura();
+  const _LowerAura({required this.sessionType});
+
+  final SessionType sessionType;
 
   @override
   Widget build(BuildContext context) {
+    final bool isFocus = sessionType == SessionType.focus;
+    final List<Color> colors = isFocus
+        ? const [
+            Color(0x442A52FF),
+            Color(0x22132C5C),
+            Colors.transparent,
+          ]
+        : const [
+            Color(0x332A52FF),
+            Color(0x11132C5C),
+            Colors.transparent,
+          ];
     return IgnorePointer(
       ignoring: true,
       child: Align(
         alignment: Alignment.bottomCenter,
-        child: Container(
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 320),
           width: double.infinity,
           height: 260,
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             gradient: RadialGradient(
-              center: Alignment(0, 0.95),
+              center: const Alignment(0, 0.95),
               radius: 0.95,
-              colors: [
-                Color(0x332A52FF),
-                Color(0x11132C5C),
-                Colors.transparent,
-              ],
-              stops: [0.0, 0.45, 1.0],
+              colors: colors,
+              stops: const [0.0, 0.45, 1.0],
             ),
           ),
         ),

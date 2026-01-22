@@ -1,19 +1,33 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'pomodoro_storage.dart';
+import '../stats/stats_controller.dart';
 
 enum SessionType { focus, breakSession }
 
 enum RunState { idle, running, paused }
 
+enum SessionCue { focusComplete, breakComplete }
+
 class PomodoroController extends ChangeNotifier {
-  PomodoroController({PomodoroStorage? storage})
-      : _storage = storage ?? PomodoroStorage();
+  PomodoroController({
+    PomodoroStorage? storage,
+    bool Function()? hapticsEnabledResolver,
+    bool Function()? soundsEnabledResolver,
+      StatsController? statsController,
+  })  : _storage = storage ?? PomodoroStorage(),
+        _isHapticsEnabled = hapticsEnabledResolver,
+      _isSoundsEnabled = soundsEnabledResolver,
+      _statsController = statsController;
 
   final PomodoroStorage _storage;
   Future<void>? _initialization;
+  final bool Function()? _isHapticsEnabled;
+  final bool Function()? _isSoundsEnabled;
+    final StatsController? _statsController;
 
   static const int _focusMin = 5;
   static const int _focusMax = 90;
@@ -159,7 +173,16 @@ class PomodoroController extends ChangeNotifier {
 
   void _handleSessionComplete() {
     _timer?.cancel();
-    if (_sessionType == SessionType.focus) {
+    final bool completedFocus = _sessionType == SessionType.focus;
+    _handleSessionCue(
+      completedFocus ? SessionCue.focusComplete : SessionCue.breakComplete,
+    );
+    if (completedFocus) {
+      final int completedMinutes = (_totalSeconds ~/ 60).clamp(0, 1440).toInt();
+      _statsController?.recordFocusCompletion(
+        completionTime: DateTime.now(),
+        focusMinutes: completedMinutes,
+      );
       _cycleCount += 1;
       _beginSession(SessionType.breakSession);
     } else {
@@ -208,6 +231,19 @@ class PomodoroController extends ChangeNotifier {
   }
 
   int _minutesToSeconds(int minutes) => minutes * 60;
+
+  void _handleSessionCue(SessionCue cue) {
+    if (_isHapticsEnabled?.call() ?? true) {
+      HapticFeedback.mediumImpact();
+    }
+    if (_isSoundsEnabled?.call() ?? false) {
+      playCue(cue);
+    }
+  }
+
+  void playCue(SessionCue cue) {
+    // Reserved for subtle sound cues in the future.
+  }
 
   void _persistConfig() {
     final PomodoroConfig config = PomodoroConfig(

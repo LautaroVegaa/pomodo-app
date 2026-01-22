@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/app_theme.dart';
 import '../../app/pomodoro_scope.dart';
+import '../../app/settings_scope.dart';
+import '../../app/stats_scope.dart';
 import 'active_session_page.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
 import '../settings/settings_page.dart';
 import '../shared/widgets/app_bottom_nav.dart';
+import '../shared/widgets/animated_progress_bar.dart';
 import '../shared/widgets/stop_session_dialog.dart';
+import '../stats/stats_format.dart';
 import '../stats/stats_page.dart';
 
 class HomePage extends StatelessWidget {
@@ -140,6 +145,7 @@ class _TimerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = SettingsScope.of(context);
     final SessionType sessionType = controller.sessionType;
     final RunState runState = controller.runState;
     final bool isFocus = sessionType == SessionType.focus;
@@ -154,44 +160,86 @@ class _TimerCard extends StatelessWidget {
     final Color baseTimerColor =
         Theme.of(context).textTheme.displayLarge?.color ??
         AppColors.textPrimary;
-    final Color timerColor = baseTimerColor.withValues(
-      alpha: isRunning ? 1.0 : 0.7,
-    );
+    final double timerOpacity = isRunning ? 1.0 : 0.65;
+    final Color timerColor = baseTimerColor;
     final double progress = controller.progress.clamp(0.0, 1.0);
+    final int remainingSeconds = controller.remainingSeconds;
+    final int transitionSeed = sessionType == SessionType.focus
+        ? controller.cycleCount * 2
+        : controller.cycleCount * 2 + 1;
+
+    final Color statusColor = isPaused
+        ? Colors.white.withValues(alpha: 0.05)
+        : isFocus
+            ? Colors.white.withValues(alpha: 0.1)
+            : AppColors.accentBlue.withValues(alpha: 0.12);
+    final List<BoxShadow> aura = [
+      BoxShadow(
+        color: isFocus
+            ? AppColors.accentBlue.withValues(alpha: 0.28)
+            : AppColors.accentBlue.withValues(alpha: 0.18),
+        blurRadius: isFocus ? 42 : 28,
+        spreadRadius: 2,
+        offset: const Offset(0, 18),
+      ),
+    ];
+    final Color progressFill = isFocus
+        ? AppColors.accentBlue
+        : AppColors.accentBlue.withValues(alpha: 0.75);
+    final Color progressGlow = isFocus
+        ? AppColors.accentBlue.withValues(alpha: 0.4)
+        : AppColors.accentBlue.withValues(alpha: 0.25);
+    final Color progressBackground = Colors.white.withValues(
+      alpha: isFocus ? 0.08 : 0.06,
+    );
 
     final IconData primaryIcon = runState == RunState.running
         ? Icons.pause_rounded
         : Icons.play_arrow_rounded;
-    final VoidCallback primaryAction;
-    switch (runState) {
-      case RunState.running:
-        primaryAction = controller.pause;
-        break;
-      case RunState.paused:
-        primaryAction = controller.resume;
-        break;
-      case RunState.idle:
-        primaryAction = controller.start;
-        break;
+
+    void handlePrimaryTap() {
+      switch (runState) {
+        case RunState.running:
+          controller.pause();
+          if (settings.hapticsEnabled) {
+            HapticFeedback.selectionClick();
+          }
+          break;
+        case RunState.paused:
+          controller.resume();
+          if (settings.hapticsEnabled) {
+            HapticFeedback.selectionClick();
+          }
+          break;
+        case RunState.idle:
+          controller.start();
+          if (settings.hapticsEnabled) {
+            HapticFeedback.lightImpact();
+          }
+          break;
+      }
     }
 
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
         decoration: BoxDecoration(
           color: AppColors.surfaceMuted.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          boxShadow: aura,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
+                color: statusColor,
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
@@ -202,38 +250,45 @@ class _TimerCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              controller.formattedRemaining,
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                fontSize: 68,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -2,
-                color: timerColor,
+            TweenAnimationBuilder<double>(
+              key: ValueKey<int>(remainingSeconds),
+              tween: Tween<double>(begin: 0.98, end: 1.0),
+              duration: const Duration(milliseconds: 260),
+              curve: Curves.easeOut,
+              builder: (context, scale, child) {
+                return Transform.scale(
+                  scale: scale,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 180),
+                    opacity: timerOpacity,
+                    child: child,
+                  ),
+                );
+              },
+              child: Text(
+                controller.formattedRemaining,
+                style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                  fontSize: 68,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -2,
+                  color: timerColor,
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            Container(
+            AnimatedProgressBar(
+              progress: progress,
+              backgroundColor: progressBackground,
+              fillColor: progressFill,
+              glowColor: progressGlow,
               height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(2),
-              ),
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: progress,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.accentBlue,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
+              sessionTrigger: transitionSeed,
             ),
             const SizedBox(height: 28),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _CircleIconButton(icon: primaryIcon, onTap: primaryAction),
+                _CircleIconButton(icon: primaryIcon, onTap: handlePrimaryTap),
                 const SizedBox(width: 24),
                 _CircleIconButton(
                   icon: Icons.stop_rounded,
@@ -243,6 +298,9 @@ class _TimerCard extends StatelessWidget {
                     );
                     if (confirmed == true) {
                       controller.stopConfirmed();
+                      if (settings.hapticsEnabled) {
+                        HapticFeedback.heavyImpact();
+                      }
                     }
                   },
                 ),
@@ -272,7 +330,28 @@ class _CircleIconButton extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(28),
         ),
-        child: Icon(icon, color: Colors.white, size: 30),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.85, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                ),
+                child: child,
+              ),
+            );
+          },
+          child: Icon(
+            icon,
+            key: ValueKey<int>(icon.codePoint ^ icon.hashCode),
+            color: Colors.white,
+            size: 30,
+          ),
+        ),
       ),
     );
   }
@@ -319,6 +398,11 @@ class _StatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final stats = StatsScope.of(context);
+    final String studied = formatFocusDuration(stats.todayFocusMinutes);
+    final String cycles = stats.todaySessions.toString();
+    final String streak = stats.streakDays.toString();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
@@ -337,10 +421,10 @@ class _StatsCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Row(
-            children: const [
-              _StatColumn(value: '0', label: 'Ciclos'),
-              _StatColumn(value: '0h 0m', label: 'Estudiado'),
-              _StatColumn(value: '0', label: 'Racha'),
+            children: [
+              _StatColumn(value: cycles, label: 'Ciclos'),
+              _StatColumn(value: studied, label: 'Estudiado'),
+              _StatColumn(value: streak, label: 'Racha'),
             ],
           ),
         ],
@@ -379,3 +463,4 @@ class _StatColumn extends StatelessWidget {
     );
   }
 }
+

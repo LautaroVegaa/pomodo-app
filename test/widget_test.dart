@@ -50,7 +50,10 @@ void main() {
     expect(find.text('Pomodō.'), findsOneWidget);
     expect(find.text('Focus'), findsWidgets);
     expect(find.text('25:00'), findsOneWidget);
-    expect(find.text('Personalizar Pomodoro'), findsOneWidget);
+    expect(
+      find.textContaining('El foco es un músculo'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Stats'));
     await tester.pumpAndSettle();

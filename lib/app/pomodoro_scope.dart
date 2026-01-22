@@ -3,11 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../features/pomodoro/pomodoro_controller.dart';
+import '../features/settings/settings_controller.dart';
+import '../features/stats/stats_controller.dart';
 
 class PomodoroScope extends StatefulWidget {
-  const PomodoroScope({super.key, required this.child});
+  const PomodoroScope({
+    super.key,
+    required this.child,
+    required this.settingsController,
+    required this.statsController,
+  });
 
   final Widget child;
+  final SettingsController settingsController;
+  final StatsController statsController;
 
   static PomodoroController of(BuildContext context) {
     final _PomodoroInherited? inherited = context
@@ -31,7 +40,12 @@ class _PomodoroScopeState extends State<PomodoroScope>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _controller = PomodoroController();
+    final SettingsController settings = widget.settingsController;
+    _controller = PomodoroController(
+      hapticsEnabledResolver: () => settings.hapticsEnabled,
+      soundsEnabledResolver: () => settings.soundsEnabled,
+      statsController: widget.statsController,
+    );
     unawaited(_controller.initialize());
   }
 

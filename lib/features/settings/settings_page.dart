@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_theme.dart';
 import '../../app/pomodoro_scope.dart';
+import '../../app/settings_scope.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
+import 'settings_controller.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -11,8 +13,10 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final PomodoroController controller = PomodoroScope.of(context);
+    final SettingsController settings = SettingsScope.of(context);
+    final Listenable combined = Listenable.merge([controller, settings]);
     return AnimatedBuilder(
-      animation: controller,
+      animation: combined,
       builder: (context, _) {
         return OnboardingScaffold(
           child: Column(
@@ -21,7 +25,12 @@ class SettingsPage extends StatelessWidget {
               const SizedBox(height: 8),
               const _Header(),
               const SizedBox(height: 24),
-              Expanded(child: _SettingsList(controller: controller)),
+              Expanded(
+                child: _SettingsList(
+                  controller: controller,
+                  settings: settings,
+                ),
+              ),
             ],
           ),
         );
@@ -60,9 +69,13 @@ class _Header extends StatelessWidget {
 }
 
 class _SettingsList extends StatelessWidget {
-  const _SettingsList({required this.controller});
+  const _SettingsList({
+    required this.controller,
+    required this.settings,
+  });
 
   final PomodoroController controller;
+  final SettingsController settings;
 
   @override
   Widget build(BuildContext context) {
@@ -102,11 +115,23 @@ class _SettingsList extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          const _SettingsCard(
+          _SettingsCard(
             title: 'Experience',
             rows: [
-              _SettingsRowData(label: 'Sounds', value: 'On'),
-              _SettingsRowData(label: 'Haptics', value: 'On'),
+              _SettingsRowData(
+                label: 'Sounds',
+                trailing: _SettingsSwitch(
+                  value: settings.soundsEnabled,
+                  onChanged: settings.setSoundsEnabled,
+                ),
+              ),
+              _SettingsRowData(
+                label: 'Haptics',
+                trailing: _SettingsSwitch(
+                  value: settings.hapticsEnabled,
+                  onChanged: settings.setHapticsEnabled,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -242,8 +267,9 @@ class _SettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final Widget? trailing = data.trailing;
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+      behavior: data.onTap == null ? HitTestBehavior.translucent : HitTestBehavior.opaque,
       onTap: data.onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -257,13 +283,14 @@ class _SettingsRow extends StatelessWidget {
                 ),
               ),
             ),
-            Text(
-              data.value,
-              style: textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary.withValues(alpha: 0.95),
-              ),
-            ),
+            trailing ??
+                Text(
+                  data.value ?? '',
+                  style: textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary.withValues(alpha: 0.95),
+                  ),
+                ),
           ],
         ),
       ),
@@ -274,13 +301,47 @@ class _SettingsRow extends StatelessWidget {
 class _SettingsRowData {
   const _SettingsRowData({
     required this.label,
-    required this.value,
+    this.value,
+    this.trailing,
     this.onTap,
   });
 
   final String label;
-  final String value;
+  final String? value;
+  final Widget? trailing;
   final VoidCallback? onTap;
+}
+
+class _SettingsSwitch extends StatelessWidget {
+  const _SettingsSwitch({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final WidgetStateProperty<Color?> thumbColor =
+        WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.selected)) {
+        return Colors.white;
+      }
+      return Colors.white.withValues(alpha: 0.9);
+    });
+    final WidgetStateProperty<Color?> trackColor =
+        WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.selected)) {
+        return AppColors.accentBlue.withValues(alpha: 0.6);
+      }
+      return Colors.white.withValues(alpha: 0.2);
+    });
+    return Switch(
+      value: value,
+      onChanged: onChanged,
+      thumbColor: thumbColor,
+      trackColor: trackColor,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
 }
 
 Future<int?> _showStepperDialog({

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_theme.dart';
+import '../../app/stats_scope.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../settings/settings_page.dart';
 import '../shared/widgets/app_bottom_nav.dart';
+import 'stats_format.dart';
 
 class StatsPage extends StatefulWidget {
   const StatsPage({super.key});
@@ -38,7 +40,7 @@ class _StatsPageState extends State<StatsPage> {
                 children: [
                   _PrimaryStatsCard(rangeIndex: _selectedIndex),
                   const SizedBox(height: 24),
-                  const _SecondaryStatsCard(),
+                  _SecondaryStatsCard(),
                   const SizedBox(height: 32),
                   Text(
                     'Consistency is built quietly.',
@@ -160,6 +162,23 @@ class _PrimaryStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final stats = StatsScope.of(context);
+    final int minutes;
+    switch (rangeIndex) {
+      case 1:
+        minutes = stats.weeklyFocusMinutes;
+        break;
+      case 2:
+        minutes = stats.monthlyFocusMinutes;
+        break;
+      default:
+        minutes = stats.todayFocusMinutes;
+        break;
+    }
+    final String studied = formatFocusDuration(minutes);
+    final String cycles = stats.todaySessions.toString();
+    final String streak = stats.streakDays.toString();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 24),
@@ -179,10 +198,10 @@ class _PrimaryStatsCard extends StatelessWidget {
           ),
           const SizedBox(height: 24),
           Row(
-            children: const [
-              _StatColumn(value: '0', label: 'Ciclos'),
-              _StatColumn(value: '0h 0m', label: 'Estudiado'),
-              _StatColumn(value: '0', label: 'Racha'),
+            children: [
+              _StatColumn(value: cycles, label: 'Ciclos'),
+              _StatColumn(value: studied, label: 'Estudiado'),
+              _StatColumn(value: streak, label: 'Racha'),
             ],
           ),
         ],
@@ -227,6 +246,11 @@ class _SecondaryStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final stats = StatsScope.of(context);
+    final String averageSession =
+        formatMinutesLabel(stats.averageSessionMinutes);
+    final String totalFocus = formatFocusDuration(stats.lifetimeMinutes);
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 24),
@@ -235,10 +259,10 @@ class _SecondaryStatsCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
-        children: const [
-          _SecondaryRow(label: 'Average focus session', value: '25 min'),
-          SizedBox(height: 16),
-          _SecondaryRow(label: 'Total focus time', value: '0h 0m'),
+        children: [
+          _SecondaryRow(label: 'Average focus session', value: averageSession),
+          const SizedBox(height: 16),
+          _SecondaryRow(label: 'Total focus time', value: totalFocus),
         ],
       ),
     );
