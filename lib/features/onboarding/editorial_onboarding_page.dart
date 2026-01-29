@@ -61,6 +61,15 @@ class _EditorialOnboardingPageState extends State<EditorialOnboardingPage> {
                 duration: const Duration(milliseconds: 450),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
+                layoutBuilder: (currentChild, previousChildren) {
+                  return Stack(
+                    alignment: Alignment.centerLeft,
+                    children: [
+                      ...previousChildren,
+                      if (currentChild != null) currentChild,
+                    ],
+                  );
+                },
                 child: _EditorialSlide(
                   key: ValueKey(_currentIndex),
                   data: slide,

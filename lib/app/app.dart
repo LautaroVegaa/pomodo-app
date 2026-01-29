@@ -1,14 +1,19 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../features/onboarding/editorial_onboarding_page.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/stats/stats_controller.dart';
+import '../services/completion_audio_service.dart';
 import 'app_theme.dart';
 import 'pomodoro_scope.dart';
 import 'settings_scope.dart';
 import 'stats_scope.dart';
+import 'tab_shell.dart';
+import 'timer_scope.dart';
+import 'stopwatch_scope.dart';
 
 class PomodoApp extends StatefulWidget {
   const PomodoApp({super.key});
@@ -20,18 +25,26 @@ class PomodoApp extends StatefulWidget {
 class _PomodoAppState extends State<PomodoApp> {
   late final SettingsController _settingsController;
   late final StatsController _statsController;
+  late final CompletionAudioService _audioService;
 
   @override
   void initState() {
     super.initState();
     _settingsController = SettingsController();
     unawaited(_settingsController.initialize());
+    _audioService = CompletionAudioService(
+      soundsEnabledResolver: () => _settingsController.soundsEnabled,
+    );
+    if (kDebugMode) {
+      unawaited(_audioService.debugWarmupPlayback());
+    }
     _statsController = StatsController();
     unawaited(_statsController.initialize());
   }
 
   @override
   void dispose() {
+    unawaited(_audioService.dispose());
     _statsController.dispose();
     _settingsController.dispose();
     super.dispose();
@@ -46,13 +59,20 @@ class _PomodoAppState extends State<PomodoApp> {
         child: PomodoroScope(
           settingsController: _settingsController,
           statsController: _statsController,
-          child: MaterialApp(
-            title: 'Pomodo',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.darkTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: ThemeMode.dark,
-            home: const EditorialOnboardingPage(),
+          audioService: _audioService,
+          child: TimerScope(
+            audioService: _audioService,
+            child: StopwatchScope(
+              child: MaterialApp(
+                title: 'Pomodo',
+                debugShowCheckedModeBanner: false,
+                theme: AppTheme.darkTheme,
+                darkTheme: AppTheme.darkTheme,
+                themeMode: ThemeMode.dark,
+                home: const EditorialOnboardingPage(),
+                routes: {'/tabs': (context) => const TabShell()},
+              ),
+            ),
           ),
         ),
       ),

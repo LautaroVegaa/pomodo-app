@@ -6,11 +6,10 @@ import '../../app/pomodoro_scope.dart';
 import '../../app/settings_scope.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
+import '../pomodoro/session_labels.dart';
 import '../settings/settings_page.dart';
-import '../shared/widgets/app_bottom_nav.dart';
 import '../shared/widgets/animated_progress_bar.dart';
 import '../shared/widgets/stop_session_dialog.dart';
-import '../stats/stats_page.dart';
 
 class ActiveSessionPage extends StatelessWidget {
   const ActiveSessionPage({super.key});
@@ -37,6 +36,9 @@ class ActiveSessionPage extends StatelessWidget {
     final RunState runState = controller.runState;
     final bool isFocus = sessionType == SessionType.focus;
     final bool isRunning = runState == RunState.running;
+    final SessionLabels sessionLabels = deriveSessionLabels(controller);
+    final String statusLabel = sessionLabels.status;
+    final String primaryLabel = sessionLabels.primary;
 
     final Color timerColor = AppColors.textPrimary;
     final double timerOpacity = isRunning ? 1.0 : 0.65;
@@ -53,7 +55,7 @@ class ActiveSessionPage extends StatelessWidget {
     final int transitionSeed = sessionType == SessionType.focus
         ? controller.cycleCount * 2
         : controller.cycleCount * 2 + 1;
-    final String labelText = isFocus ? 'Focus' : 'Break';
+    final String labelText = primaryLabel;
     final String motivational = isFocus
         ? 'Stay with one thing.'
         : 'Breathe. Then begin again.';
@@ -97,7 +99,11 @@ class ActiveSessionPage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _StatusPill(sessionType: sessionType, runState: runState),
+                    _StatusPill(
+                      sessionType: sessionType,
+                      runState: runState,
+                      label: statusLabel,
+                    ),
                     const Spacer(flex: 2),
                     _TimerReadout(
                       timeText: controller.formattedRemaining,
@@ -149,12 +155,7 @@ class ActiveSessionPage extends StatelessWidget {
                   ],
                 ),
               ),
-              AppBottomNav(
-                selected: AppNavSection.focus,
-                onStatsTap: () => Navigator.of(
-                  context,
-                ).push(MaterialPageRoute(builder: (_) => const StatsPage())),
-              ),
+              const SizedBox(height: 8),
             ],
           ),
         ],
@@ -197,20 +198,20 @@ class _SessionHeader extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.sessionType, required this.runState});
+  const _StatusPill({
+    required this.sessionType,
+    required this.runState,
+    required this.label,
+  });
 
   final SessionType sessionType;
   final RunState runState;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
     final bool isFocus = sessionType == SessionType.focus;
     final bool isPaused = runState == RunState.paused;
-    final String label = isPaused
-        ? 'Paused'
-        : isFocus
-            ? 'Focus'
-            : 'Break';
     final Color color = isPaused
         ? Colors.white.withValues(alpha: 0.05)
         : isFocus

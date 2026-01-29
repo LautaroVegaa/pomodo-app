@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../features/pomodoro/pomodoro_controller.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/stats/stats_controller.dart';
+import '../services/completion_audio_service.dart';
 
 class PomodoroScope extends StatefulWidget {
   const PomodoroScope({
@@ -12,11 +13,13 @@ class PomodoroScope extends StatefulWidget {
     required this.child,
     required this.settingsController,
     required this.statsController,
+    required this.audioService,
   });
 
   final Widget child;
   final SettingsController settingsController;
   final StatsController statsController;
+  final CompletionAudioService audioService;
 
   static PomodoroController of(BuildContext context) {
     final _PomodoroInherited? inherited = context
@@ -45,6 +48,7 @@ class _PomodoroScopeState extends State<PomodoroScope>
       hapticsEnabledResolver: () => settings.hapticsEnabled,
       soundsEnabledResolver: () => settings.soundsEnabled,
       statsController: widget.statsController,
+      audioService: widget.audioService,
     );
     unawaited(_controller.initialize());
   }

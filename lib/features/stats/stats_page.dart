@@ -4,7 +4,6 @@ import '../../app/app_theme.dart';
 import '../../app/stats_scope.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../settings/settings_page.dart';
-import '../shared/widgets/app_bottom_nav.dart';
 import 'stats_format.dart';
 
 class StatsPage extends StatefulWidget {
@@ -52,11 +51,6 @@ class _StatsPageState extends State<StatsPage> {
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          AppBottomNav(
-            selected: AppNavSection.stats,
-            onFocusTap: () => Navigator.of(context).maybePop(),
           ),
         ],
       ),

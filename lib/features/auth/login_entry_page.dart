@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_theme.dart';
-import '../home/home_page.dart';
+import '../../app/tab_shell.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 
 class LoginEntryPage extends StatelessWidget {
@@ -49,7 +49,7 @@ class LoginEntryPage extends StatelessWidget {
 
   void _goHome(BuildContext context) {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const HomePage()),
+      MaterialPageRoute(builder: (_) => const TabShell()),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'pomodoro_storage.dart';
 import '../stats/stats_controller.dart';
+import '../../services/completion_audio_service.dart';
 
 enum SessionType { focus, breakSession }
 
@@ -17,17 +18,20 @@ class PomodoroController extends ChangeNotifier {
     PomodoroStorage? storage,
     bool Function()? hapticsEnabledResolver,
     bool Function()? soundsEnabledResolver,
-      StatsController? statsController,
-  })  : _storage = storage ?? PomodoroStorage(),
-        _isHapticsEnabled = hapticsEnabledResolver,
-      _isSoundsEnabled = soundsEnabledResolver,
-      _statsController = statsController;
+    StatsController? statsController,
+    CompletionAudioService? audioService,
+  }) : _storage = storage ?? PomodoroStorage(),
+       _isHapticsEnabled = hapticsEnabledResolver,
+       _isSoundsEnabled = soundsEnabledResolver,
+       _statsController = statsController,
+       _audioService = audioService;
 
   final PomodoroStorage _storage;
   Future<void>? _initialization;
   final bool Function()? _isHapticsEnabled;
   final bool Function()? _isSoundsEnabled;
-    final StatsController? _statsController;
+  final StatsController? _statsController;
+  final CompletionAudioService? _audioService;
 
   static const int _focusMin = 5;
   static const int _focusMax = 90;
@@ -41,8 +45,7 @@ class PomodoroController extends ChangeNotifier {
   int _focusMinutes = PomodoroConfig.defaults.focusMinutes;
   int _breakMinutes = PomodoroConfig.defaults.breakMinutes;
   int _longBreakMinutes = PomodoroConfig.defaults.longBreakMinutes;
-  int _longBreakEveryCycles =
-      PomodoroConfig.defaults.longBreakEveryCycles;
+  int _longBreakEveryCycles = PomodoroConfig.defaults.longBreakEveryCycles;
 
   final Duration _tick = const Duration(seconds: 1);
 
@@ -51,6 +54,7 @@ class PomodoroController extends ChangeNotifier {
   int _remainingSeconds = 25 * 60;
   int _totalSeconds = 25 * 60;
   int _cycleCount = 0;
+  bool _isCurrentBreakLong = false;
 
   Timer? _timer;
 
@@ -63,6 +67,8 @@ class PomodoroController extends ChangeNotifier {
   int get breakMinutes => _breakMinutes;
   int get longBreakMinutes => _longBreakMinutes;
   int get longBreakEveryCycles => _longBreakEveryCycles;
+  bool get isLongBreakSession =>
+      _sessionType == SessionType.breakSession && _isCurrentBreakLong;
   String get durationSummary =>
       '$_focusMinutes min focus · $_breakMinutes min break';
   String get formattedRemaining => _formatTime(_remainingSeconds);
@@ -133,6 +139,7 @@ class PomodoroController extends ChangeNotifier {
     _totalSeconds = focusSeconds;
     _remainingSeconds = focusSeconds;
     _cycleCount = 0;
+    _isCurrentBreakLong = false;
     _notify();
   }
 
@@ -191,7 +198,11 @@ class PomodoroController extends ChangeNotifier {
   }
 
   void _beginSession(SessionType type) {
-    final int targetDuration = _durationFor(type);
+    final bool nextIsLongBreak =
+        type == SessionType.breakSession ? _shouldUseLongBreak() : false;
+    _isCurrentBreakLong = nextIsLongBreak;
+    final int targetDuration =
+        _durationFor(type, isLongBreakOverride: nextIsLongBreak);
     _sessionType = type;
     _totalSeconds = targetDuration;
     _remainingSeconds = targetDuration;
@@ -203,10 +214,14 @@ class PomodoroController extends ChangeNotifier {
   void _applyConfig(PomodoroConfig config) {
     _focusMinutes = config.focusMinutes.clamp(_focusMin, _focusMax);
     _breakMinutes = config.breakMinutes.clamp(_breakMin, _breakMax);
-    _longBreakMinutes =
-        config.longBreakMinutes.clamp(_longBreakMin, _longBreakMax);
-    _longBreakEveryCycles = config.longBreakEveryCycles
-        .clamp(_longBreakCyclesMin, _longBreakCyclesMax);
+    _longBreakMinutes = config.longBreakMinutes.clamp(
+      _longBreakMin,
+      _longBreakMax,
+    );
+    _longBreakEveryCycles = config.longBreakEveryCycles.clamp(
+      _longBreakCyclesMin,
+      _longBreakCyclesMax,
+    );
 
     if (_runState == RunState.idle) {
       final int target = _sessionType == SessionType.focus
@@ -219,15 +234,19 @@ class PomodoroController extends ChangeNotifier {
     _notify();
   }
 
-  int _durationFor(SessionType type) {
+  int _durationFor(SessionType type, {bool? isLongBreakOverride}) {
     if (type == SessionType.focus) {
       return _minutesToSeconds(_focusMinutes);
     }
 
     final bool useLongBreak =
-        _cycleCount > 0 && _cycleCount % _longBreakEveryCycles == 0;
+      isLongBreakOverride ?? _isCurrentBreakLong;
     final int breakMinutes = useLongBreak ? _longBreakMinutes : _breakMinutes;
     return _minutesToSeconds(breakMinutes);
+  }
+
+  bool _shouldUseLongBreak() {
+    return _cycleCount > 0 && _cycleCount % _longBreakEveryCycles == 0;
   }
 
   int _minutesToSeconds(int minutes) => minutes * 60;
@@ -242,7 +261,7 @@ class PomodoroController extends ChangeNotifier {
   }
 
   void playCue(SessionCue cue) {
-    // Reserved for subtle sound cues in the future.
+    _audioService?.playCompletionCue();
   }
 
   void _persistConfig() {
@@ -272,7 +291,8 @@ class PomodoroController extends ChangeNotifier {
     final int clamped = minutes.clamp(_breakMin, _breakMax);
     if (_breakMinutes == clamped) return;
     _breakMinutes = clamped;
-    if (_runState == RunState.idle && _sessionType == SessionType.breakSession) {
+    if (_runState == RunState.idle &&
+        _sessionType == SessionType.breakSession) {
       final int secs = _minutesToSeconds(_breakMinutes);
       _totalSeconds = secs;
       _remainingSeconds = secs;
@@ -285,7 +305,8 @@ class PomodoroController extends ChangeNotifier {
     final int clamped = minutes.clamp(_longBreakMin, _longBreakMax);
     if (_longBreakMinutes == clamped) return;
     _longBreakMinutes = clamped;
-    if (_runState == RunState.idle && _sessionType == SessionType.breakSession) {
+    if (_runState == RunState.idle &&
+        _sessionType == SessionType.breakSession) {
       final int secs = _minutesToSeconds(_longBreakMinutes);
       _totalSeconds = secs;
       _remainingSeconds = secs;

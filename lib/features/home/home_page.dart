@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_theme.dart';
@@ -8,60 +9,121 @@ import '../../app/stats_scope.dart';
 import 'active_session_page.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
+import '../pomodoro/session_labels.dart';
 import '../settings/settings_page.dart';
-import '../shared/widgets/app_bottom_nav.dart';
 import '../shared/widgets/animated_progress_bar.dart';
+import '../shared/widgets/card_blur.dart';
 import '../shared/widgets/stop_session_dialog.dart';
 import '../stats/stats_format.dart';
-import '../stats/stats_page.dart';
+import '../timer/timer_page.dart';
+import '../stopwatch/stopwatch_page.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   static const _tabLabels = ['Pomodoro', 'Timer', 'Stopwatch'];
 
   @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage> {
+  static const double _bodyTopSpacing = 16;
+
+  double _headerHeight = 0;
+
+  void _handleHeaderSizeChanged(Size size) {
+    if (!mounted) {
+      return;
+    }
+    final double nextHeight = size.height;
+    if (nextHeight == 0) {
+      return;
+    }
+    if ((nextHeight - _headerHeight).abs() < 0.5) {
+      return;
+    }
+    setState(() {
+      _headerHeight = nextHeight;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final PomodoroController controller = PomodoroScope.of(context);
     return OnboardingScaffold(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          const SizedBox(height: 8),
-          _Header(),
-          const SizedBox(height: 24),
-          _ModeTabs(),
-          const SizedBox(height: 24),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Column(
-                children: [
-                  _TimerCard(
-                    controller: controller,
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const ActiveSessionPage(),
-                      ),
+          Positioned.fill(
+            child: ListView(
+              padding: EdgeInsets.only(
+                top: _headerHeight + _bodyTopSpacing,
+                bottom: 24,
+              ),
+              physics: const ClampingScrollPhysics(),
+              clipBehavior: Clip.none,
+              children: [
+                _TimerCard(
+                  controller: controller,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const ActiveSessionPage(),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const _QuoteCard(),
-                  const SizedBox(height: 24),
-                  const _StatsCard(),
-                ],
+                ),
+                const SizedBox(height: 24),
+                const _QuoteCard(),
+                const SizedBox(height: 24),
+                const _StatsCard(),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _MeasureSize(
+              onChange: _handleHeaderSizeChanged,
+              child: _HeaderBlock(
+                onTimerTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const TimerPage())),
+                onStopwatchTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const StopwatchPage())),
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          AppBottomNav(
-            selected: AppNavSection.focus,
-            onStatsTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (_) => const StatsPage())),
-          ),
         ],
       ),
+    );
+  }
+}
+
+class _HeaderBlock extends StatelessWidget {
+  const _HeaderBlock({
+    required this.onTimerTap,
+    required this.onStopwatchTap,
+  });
+
+  final VoidCallback? onTimerTap;
+  final VoidCallback? onStopwatchTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        const _Header(),
+        const SizedBox(height: 24),
+        _ModeTabs(
+          onTimerTap: onTimerTap,
+          onStopwatchTap: onStopwatchTap,
+        ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 }
@@ -99,34 +161,88 @@ class _Header extends StatelessWidget {
   }
 }
 
+class _MeasureSize extends SingleChildRenderObjectWidget {
+  const _MeasureSize({required this.onChange, required super.child});
+
+  final ValueChanged<Size> onChange;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    return _MeasureSizeRenderObject(onChange);
+  }
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    covariant _MeasureSizeRenderObject renderObject,
+  ) {
+    renderObject.onChange = onChange;
+  }
+}
+
+class _MeasureSizeRenderObject extends RenderProxyBox {
+  _MeasureSizeRenderObject(this.onChange);
+
+  ValueChanged<Size> onChange;
+  Size? _oldSize;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    final Size newSize = child?.size ?? Size.zero;
+    if (_oldSize == newSize) {
+      return;
+    }
+    _oldSize = newSize;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onChange(newSize);
+    });
+  }
+}
+
 class _ModeTabs extends StatelessWidget {
-  const _ModeTabs();
+  const _ModeTabs({this.onTimerTap, this.onStopwatchTap});
+
+  final VoidCallback? onTimerTap;
+  final VoidCallback? onStopwatchTap;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: List.generate(HomePage._tabLabels.length, (index) {
         final bool selected = index == 0;
+        VoidCallback? handler;
+        if (index == 1) {
+          handler = onTimerTap;
+        } else if (index == 2) {
+          handler = onStopwatchTap;
+        }
         return Expanded(
-          child: Container(
-            margin: EdgeInsets.only(
-              right: index == HomePage._tabLabels.length - 1 ? 0 : 12,
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.accentBlue.withValues(alpha: 0.18)
-                  : Colors.white.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Center(
-              child: Text(
-                HomePage._tabLabels[index],
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: selected
-                      ? Colors.white
-                      : AppColors.textPrimary.withValues(alpha: 0.65),
+          child: GestureDetector(
+            onTap: handler,
+            behavior: handler != null
+                ? HitTestBehavior.opaque
+                : HitTestBehavior.deferToChild,
+            child: Container(
+              margin: EdgeInsets.only(
+                right: index == HomePage._tabLabels.length - 1 ? 0 : 12,
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppColors.accentBlue.withValues(alpha: 0.18)
+                    : Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Center(
+                child: Text(
+                  HomePage._tabLabels[index],
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? Colors.white
+                        : AppColors.textPrimary.withValues(alpha: 0.65),
+                  ),
                 ),
               ),
             ),
@@ -151,12 +267,8 @@ class _TimerCard extends StatelessWidget {
     final bool isFocus = sessionType == SessionType.focus;
     final bool isRunning = runState == RunState.running;
     final bool isPaused = runState == RunState.paused;
-
-    final String statusText = isPaused
-        ? 'Paused'
-        : isFocus
-        ? 'Focus'
-        : 'Break';
+    final SessionLabels sessionLabels = deriveSessionLabels(controller);
+    final String statusText = sessionLabels.status;
     final Color baseTimerColor =
         Theme.of(context).textTheme.displayLarge?.color ??
         AppColors.textPrimary;
@@ -171,18 +283,8 @@ class _TimerCard extends StatelessWidget {
     final Color statusColor = isPaused
         ? Colors.white.withValues(alpha: 0.05)
         : isFocus
-            ? Colors.white.withValues(alpha: 0.1)
-            : AppColors.accentBlue.withValues(alpha: 0.12);
-    final List<BoxShadow> aura = [
-      BoxShadow(
-        color: isFocus
-            ? AppColors.accentBlue.withValues(alpha: 0.28)
-            : AppColors.accentBlue.withValues(alpha: 0.18),
-        blurRadius: isFocus ? 42 : 28,
-        spreadRadius: 2,
-        offset: const Offset(0, 18),
-      ),
-    ];
+        ? Colors.white.withValues(alpha: 0.1)
+        : AppColors.accentBlue.withValues(alpha: 0.12);
     final Color progressFill = isFocus
         ? AppColors.accentBlue
         : AppColors.accentBlue.withValues(alpha: 0.75);
@@ -230,7 +332,7 @@ class _TimerCard extends StatelessWidget {
           color: AppColors.surfaceMuted.withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(32),
           border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          boxShadow: aura,
+          boxShadow: buildPrimaryCardBlur(),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -463,4 +565,3 @@ class _StatColumn extends StatelessWidget {
     );
   }
 }
-

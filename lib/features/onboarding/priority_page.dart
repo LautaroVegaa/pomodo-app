@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../home/home_page.dart';
+import '../../app/tab_shell.dart';
 import 'models/onboarding_data.dart';
 import 'widgets/onboarding_scaffold.dart';
 import 'widgets/option_tile.dart';
@@ -70,7 +70,7 @@ class _PriorityPageState extends State<PriorityPage> {
 
   void _goToHome() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const HomePage()),
+      MaterialPageRoute(builder: (_) => const TabShell()),
       (route) => false,
     );
   }
