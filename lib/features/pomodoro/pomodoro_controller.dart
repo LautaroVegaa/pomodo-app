@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'pomodoro_storage.dart';
 import '../stats/stats_controller.dart';
 import '../../services/completion_audio_service.dart';
+import '../../services/completion_banner_controller.dart';
+import '../../services/notification_service.dart';
 
 enum SessionType { focus, breakSession }
 
@@ -20,11 +22,17 @@ class PomodoroController extends ChangeNotifier {
     bool Function()? soundsEnabledResolver,
     StatsController? statsController,
     CompletionAudioService? audioService,
+    NotificationService? notificationService,
+     CompletionBannerController? bannerController,
+     bool Function()? notificationsEnabledResolver,
   }) : _storage = storage ?? PomodoroStorage(),
        _isHapticsEnabled = hapticsEnabledResolver,
        _isSoundsEnabled = soundsEnabledResolver,
        _statsController = statsController,
-       _audioService = audioService;
+       _audioService = audioService,
+       _notificationService = notificationService,
+       _bannerController = bannerController,
+       _notificationsEnabledResolver = notificationsEnabledResolver;
 
   final PomodoroStorage _storage;
   Future<void>? _initialization;
@@ -32,6 +40,9 @@ class PomodoroController extends ChangeNotifier {
   final bool Function()? _isSoundsEnabled;
   final StatsController? _statsController;
   final CompletionAudioService? _audioService;
+  final NotificationService? _notificationService;
+  final CompletionBannerController? _bannerController;
+  final bool Function()? _notificationsEnabledResolver;
 
   static const int _focusMin = 5;
   static const int _focusMax = 90;
@@ -51,16 +62,18 @@ class PomodoroController extends ChangeNotifier {
 
   SessionType _sessionType = SessionType.focus;
   RunState _runState = RunState.idle;
-  int _remainingSeconds = 25 * 60;
   int _totalSeconds = 25 * 60;
+  int _cachedRemainingSeconds = 25 * 60;
   int _cycleCount = 0;
   bool _isCurrentBreakLong = false;
+  DateTime? _endTime;
+  bool _isAppInForeground = true;
 
   Timer? _timer;
 
   SessionType get sessionType => _sessionType;
   RunState get runState => _runState;
-  int get remainingSeconds => _remainingSeconds;
+  int get remainingSeconds => _computeRemainingSeconds();
   int get totalSeconds => _totalSeconds;
   int get cycleCount => _cycleCount;
   int get focusMinutes => _focusMinutes;
@@ -71,7 +84,7 @@ class PomodoroController extends ChangeNotifier {
       _sessionType == SessionType.breakSession && _isCurrentBreakLong;
   String get durationSummary =>
       '$_focusMinutes min focus · $_breakMinutes min break';
-  String get formattedRemaining => _formatTime(_remainingSeconds);
+  String get formattedRemaining => _formatTime(remainingSeconds);
 
   Future<void> initialize() {
     return _initialization ??= _loadPersistedConfig();
@@ -88,28 +101,38 @@ class PomodoroController extends ChangeNotifier {
 
   double get progress {
     if (_totalSeconds == 0) return 0;
-    final double completed = 1 - (_remainingSeconds / _totalSeconds);
+    final double completed = 1 - (remainingSeconds / _totalSeconds);
     return completed.clamp(0, 1);
   }
 
   void start() {
     if (_runState != RunState.idle) return;
+    _cachedRemainingSeconds = _totalSeconds;
+    _endTime = DateTime.now().add(Duration(seconds: _cachedRemainingSeconds));
     _runState = RunState.running;
+    _cancelPomodoroNotification('start');
     _notify();
+    _schedulePomodoroNotification('start');
     _ensureTimer();
   }
 
   void pause() {
     if (_runState != RunState.running) return;
+    _cachedRemainingSeconds = remainingSeconds;
+    _endTime = null;
     _runState = RunState.paused;
     _timer?.cancel();
+    _cancelPomodoroNotification('pause');
     _notify();
   }
 
   void resume() {
     if (_runState != RunState.paused) return;
+    _endTime = DateTime.now().add(Duration(seconds: _cachedRemainingSeconds));
     _runState = RunState.running;
+    _cancelPomodoroNotification('resume');
     _notify();
+    _schedulePomodoroNotification('resume');
     _ensureTimer();
   }
 
@@ -133,26 +156,38 @@ class PomodoroController extends ChangeNotifier {
 
   void resetToIdleFocus() {
     _timer?.cancel();
+    _cancelPomodoroNotification('reset');
     _sessionType = SessionType.focus;
     _runState = RunState.idle;
     final int focusSeconds = _minutesToSeconds(_focusMinutes);
     _totalSeconds = focusSeconds;
-    _remainingSeconds = focusSeconds;
+    _cachedRemainingSeconds = focusSeconds;
     _cycleCount = 0;
     _isCurrentBreakLong = false;
+    _endTime = null;
     _notify();
   }
 
   void handleLifecycleChange(AppLifecycleState state) {
+    _isAppInForeground = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.resumed) {
+      _cancelPomodoroNotification('lifecycle_resumed');
+      _reconcileElapsedTime();
+      return;
+    }
+
     if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
-      pause();
+      state == AppLifecycleState.inactive) {
+      if (_runState == RunState.running && _endTime != null) {
+        _schedulePomodoroNotification('lifecycle_${state.name}');
+      }
     }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _cancelPomodoroNotification('dispose');
     super.dispose();
   }
 
@@ -167,22 +202,44 @@ class PomodoroController extends ChangeNotifier {
       _timer?.cancel();
       return;
     }
-
-    if (_remainingSeconds <= 1) {
-      _remainingSeconds = 0;
+    final int seconds = remainingSeconds;
+    if (seconds <= 0) {
       _notify();
       _handleSessionComplete();
     } else {
-      _remainingSeconds -= 1;
       _notify();
+    }
+  }
+
+  void _reconcileElapsedTime() {
+    if (_runState != RunState.running) {
+      _notify();
+      return;
+    }
+    if (_endTime == null) {
+      return;
+    }
+    if (remainingSeconds <= 0) {
+      _handleSessionComplete();
+    } else {
+      _notify();
+      _ensureTimer();
     }
   }
 
   void _handleSessionComplete() {
     _timer?.cancel();
+    _cancelPomodoroNotification('session_complete');
+    _cachedRemainingSeconds = 0;
+    _endTime = null;
     final bool completedFocus = _sessionType == SessionType.focus;
+    final bool completedLongBreak = !completedFocus && _isCurrentBreakLong;
     _handleSessionCue(
       completedFocus ? SessionCue.focusComplete : SessionCue.breakComplete,
+    );
+    _showCompletionBanner(
+      completedFocus: completedFocus,
+      completedLongBreak: completedLongBreak,
     );
     if (completedFocus) {
       final int completedMinutes = (_totalSeconds ~/ 60).clamp(0, 1440).toInt();
@@ -205,9 +262,12 @@ class PomodoroController extends ChangeNotifier {
         _durationFor(type, isLongBreakOverride: nextIsLongBreak);
     _sessionType = type;
     _totalSeconds = targetDuration;
-    _remainingSeconds = targetDuration;
+    _cachedRemainingSeconds = targetDuration;
+    _endTime = DateTime.now().add(Duration(seconds: targetDuration));
     _runState = RunState.running;
+    _cancelPomodoroNotification('begin_session');
     _notify();
+    _schedulePomodoroNotification('begin_session');
     _ensureTimer();
   }
 
@@ -228,7 +288,7 @@ class PomodoroController extends ChangeNotifier {
           ? _minutesToSeconds(_focusMinutes)
           : _durationFor(SessionType.breakSession);
       _totalSeconds = target;
-      _remainingSeconds = target;
+      _cachedRemainingSeconds = target;
     }
 
     _notify();
@@ -250,6 +310,14 @@ class PomodoroController extends ChangeNotifier {
   }
 
   int _minutesToSeconds(int minutes) => minutes * 60;
+
+  int _computeRemainingSeconds() {
+    if (_runState == RunState.running && _endTime != null) {
+      final int delta = _endTime!.difference(DateTime.now()).inSeconds;
+      return delta > 0 ? delta : 0;
+    }
+    return _cachedRemainingSeconds;
+  }
 
   void _handleSessionCue(SessionCue cue) {
     if (_isHapticsEnabled?.call() ?? true) {
@@ -281,7 +349,7 @@ class PomodoroController extends ChangeNotifier {
     if (_runState == RunState.idle && _sessionType == SessionType.focus) {
       final int secs = _minutesToSeconds(_focusMinutes);
       _totalSeconds = secs;
-      _remainingSeconds = secs;
+      _cachedRemainingSeconds = secs;
     }
     _notify();
     _persistConfig();
@@ -295,7 +363,7 @@ class PomodoroController extends ChangeNotifier {
         _sessionType == SessionType.breakSession) {
       final int secs = _minutesToSeconds(_breakMinutes);
       _totalSeconds = secs;
-      _remainingSeconds = secs;
+      _cachedRemainingSeconds = secs;
     }
     _notify();
     _persistConfig();
@@ -309,7 +377,7 @@ class PomodoroController extends ChangeNotifier {
         _sessionType == SessionType.breakSession) {
       final int secs = _minutesToSeconds(_longBreakMinutes);
       _totalSeconds = secs;
-      _remainingSeconds = secs;
+      _cachedRemainingSeconds = secs;
     }
     _notify();
     _persistConfig();
@@ -331,5 +399,56 @@ class PomodoroController extends ChangeNotifier {
 
   void _notify() {
     notifyListeners();
+  }
+
+  void _schedulePomodoroNotification(String reason) {
+    final NotificationService? service = _notificationService;
+    if (service == null || _endTime == null) {
+      _log('Skipping schedule ($reason); notification service or end time missing.');
+      return;
+    }
+    _log('Scheduling ${_sessionType.name} notification ($reason) for $_endTime');
+    unawaited(
+      service.scheduleSessionCompletionNotification(
+        scheduledTime: _endTime!,
+        isFocusSession: _sessionType == SessionType.focus,
+      ),
+    );
+  }
+
+  void _cancelPomodoroNotification(String reason) {
+    final NotificationService? service = _notificationService;
+    if (service == null) {
+      return;
+    }
+    _log('Cancelling notification ($reason).');
+    unawaited(service.cancelScheduledSessionNotification());
+  }
+
+  void _log(String message) {
+    debugPrint('[PomodoroController] $message');
+  }
+
+  void _showCompletionBanner({
+    required bool completedFocus,
+    required bool completedLongBreak,
+  }) {
+    if (!_shouldShowForegroundBanner()) {
+      return;
+    }
+    CompletionBannerType type;
+    if (completedFocus) {
+      type = CompletionBannerType.focus;
+    } else if (completedLongBreak) {
+      type = CompletionBannerType.longBreak;
+    } else {
+      type = CompletionBannerType.breakSession;
+    }
+    _bannerController?.show(type);
+  }
+
+  bool _shouldShowForegroundBanner() {
+    final bool notificationsEnabled = _notificationsEnabledResolver?.call() ?? true;
+    return _isAppInForeground && notificationsEnabled;
   }
 }

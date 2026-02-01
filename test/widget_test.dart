@@ -9,10 +9,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pomodo_app/app/app.dart';
+import 'package:pomodo_app/services/notification_service.dart';
 
 void main() {
   testWidgets('Editorial onboarding advances through screens', (tester) async {
-    await tester.pumpWidget(const PomodoApp());
+    final notificationService = NotificationService.test();
+    await tester.pumpWidget(PomodoApp(notificationService: notificationService));
 
     expect(
       find.textContaining('Your attention', findRichText: true),

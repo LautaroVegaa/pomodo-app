@@ -2,20 +2,27 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../services/notification_service.dart';
 import 'settings_storage.dart';
 
 class SettingsController extends ChangeNotifier {
-  SettingsController({SettingsStorage? storage})
-      : _storage = storage ?? SettingsStorage();
+  SettingsController({
+    SettingsStorage? storage,
+    NotificationService? notificationService,
+  })  : _storage = storage ?? SettingsStorage(),
+        _notificationService = notificationService;
 
   final SettingsStorage _storage;
   Future<void>? _initialization;
+  final NotificationService? _notificationService;
 
   bool _hapticsEnabled = ExperienceSettings.defaults.hapticsEnabled;
   bool _soundsEnabled = ExperienceSettings.defaults.soundsEnabled;
+  bool _notificationsEnabled = ExperienceSettings.defaults.notificationsEnabled;
 
   bool get hapticsEnabled => _hapticsEnabled;
   bool get soundsEnabled => _soundsEnabled;
+  bool get notificationsEnabled => _notificationsEnabled;
 
   Future<void> initialize() {
     return _initialization ??= _loadExperience();
@@ -26,7 +33,11 @@ class SettingsController extends ChangeNotifier {
       final ExperienceSettings settings = await _storage.loadExperience();
       _hapticsEnabled = settings.hapticsEnabled;
       _soundsEnabled = settings.soundsEnabled;
+      _notificationsEnabled = settings.notificationsEnabled;
       notifyListeners();
+      if (_notificationsEnabled) {
+        unawaited(_verifyNotificationPermissions());
+      }
     } catch (_) {
       // Ignore load failures and keep defaults.
     }
@@ -46,12 +57,44 @@ class SettingsController extends ChangeNotifier {
     unawaited(_persist());
   }
 
+  void setNotificationsEnabled(bool value) {
+    if (_notificationsEnabled == value) return;
+    _notificationsEnabled = value;
+    notifyListeners();
+    if (!value) {
+      _cancelScheduledNotifications();
+    } else {
+      unawaited(_verifyNotificationPermissions());
+    }
+    unawaited(_persist());
+  }
+
   Future<void> _persist() {
     return _storage.saveExperience(
       ExperienceSettings(
         hapticsEnabled: _hapticsEnabled,
         soundsEnabled: _soundsEnabled,
+        notificationsEnabled: _notificationsEnabled,
       ),
     );
+  }
+
+  Future<void> _verifyNotificationPermissions() async {
+    final bool granted =
+        await (_notificationService?.ensurePermissionsGranted() ?? Future.value(true));
+    if (!granted && _notificationsEnabled) {
+      _notificationsEnabled = false;
+      notifyListeners();
+      _cancelScheduledNotifications();
+      await _persist();
+    }
+  }
+
+  void _cancelScheduledNotifications() {
+    final Future<void>? cancelFuture =
+        _notificationService?.cancelAllNotifications();
+    if (cancelFuture != null) {
+      unawaited(cancelFuture);
+    }
   }
 }

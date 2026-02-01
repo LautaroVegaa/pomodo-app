@@ -6,6 +6,8 @@ import '../features/pomodoro/pomodoro_controller.dart';
 import '../features/settings/settings_controller.dart';
 import '../features/stats/stats_controller.dart';
 import '../services/completion_audio_service.dart';
+import '../services/completion_banner_controller.dart';
+import '../services/notification_service.dart';
 
 class PomodoroScope extends StatefulWidget {
   const PomodoroScope({
@@ -14,12 +16,16 @@ class PomodoroScope extends StatefulWidget {
     required this.settingsController,
     required this.statsController,
     required this.audioService,
+    required this.notificationService,
+    required this.bannerController,
   });
 
   final Widget child;
   final SettingsController settingsController;
   final StatsController statsController;
   final CompletionAudioService audioService;
+  final NotificationService notificationService;
+  final CompletionBannerController bannerController;
 
   static PomodoroController of(BuildContext context) {
     final _PomodoroInherited? inherited = context
@@ -49,6 +55,9 @@ class _PomodoroScopeState extends State<PomodoroScope>
       soundsEnabledResolver: () => settings.soundsEnabled,
       statsController: widget.statsController,
       audioService: widget.audioService,
+      notificationService: widget.notificationService,
+      notificationsEnabledResolver: () => settings.notificationsEnabled,
+      bannerController: widget.bannerController,
     );
     unawaited(_controller.initialize());
   }

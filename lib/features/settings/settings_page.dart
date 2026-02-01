@@ -119,6 +119,13 @@ class _SettingsList extends StatelessWidget {
             title: 'Experience',
             rows: [
               _SettingsRowData(
+                label: 'Notifications',
+                trailing: _SettingsSwitch(
+                  value: settings.notificationsEnabled,
+                  onChanged: settings.setNotificationsEnabled,
+                ),
+              ),
+              _SettingsRowData(
                 label: 'Sounds',
                 trailing: _SettingsSwitch(
                   value: settings.soundsEnabled,

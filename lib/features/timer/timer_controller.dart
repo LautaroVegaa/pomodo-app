@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/completion_audio_service.dart';
+import '../../services/completion_banner_controller.dart';
+import '../../services/notification_service.dart';
 
 enum TimerRunState { idle, running, paused, completed }
 
@@ -10,8 +12,14 @@ class TimerController extends ChangeNotifier {
   TimerController({
     int initialMinutes = defaultMinutes,
     CompletionAudioService? audioService,
+    NotificationService? notificationService,
+    CompletionBannerController? bannerController,
+    bool Function()? notificationsEnabledResolver,
   }) : _selectedMinutes = _normalizeMinutes(initialMinutes),
-       _audioService = audioService {
+       _audioService = audioService,
+       _notificationService = notificationService,
+       _bannerController = bannerController,
+       _notificationsEnabledResolver = notificationsEnabledResolver {
     _totalSeconds = _selectedMinutes * 60;
     _remainingSeconds = _totalSeconds;
   }
@@ -24,6 +32,11 @@ class TimerController extends ChangeNotifier {
   final Duration _tick = const Duration(seconds: 1);
   Timer? _timer;
   final CompletionAudioService? _audioService;
+  final NotificationService? _notificationService;
+  final CompletionBannerController? _bannerController;
+  final bool Function()? _notificationsEnabledResolver;
+  DateTime? _endTime;
+  bool _isAppInForeground = true;
 
   int _selectedMinutes;
   late int _totalSeconds;
@@ -68,6 +81,9 @@ class TimerController extends ChangeNotifier {
       _remainingSeconds = _totalSeconds;
     }
     _runState = TimerRunState.running;
+    _endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
+    _cancelTimerNotification('start');
+    _scheduleTimerNotification('start');
     notifyListeners();
     _ensureTimer();
   }
@@ -76,12 +92,17 @@ class TimerController extends ChangeNotifier {
     if (_runState != TimerRunState.running) return;
     _runState = TimerRunState.paused;
     _timer?.cancel();
+    _endTime = null;
+    _cancelTimerNotification('pause');
     notifyListeners();
   }
 
   void resume() {
     if (_runState != TimerRunState.paused) return;
     _runState = TimerRunState.running;
+    _endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
+    _cancelTimerNotification('resume');
+    _scheduleTimerNotification('resume');
     notifyListeners();
     _ensureTimer();
   }
@@ -90,10 +111,13 @@ class TimerController extends ChangeNotifier {
     _timer?.cancel();
     _runState = TimerRunState.idle;
     _remainingSeconds = _totalSeconds;
+    _endTime = null;
+    _cancelTimerNotification('stop');
     notifyListeners();
   }
 
   void handleLifecycleChange(AppLifecycleState state) {
+    _isAppInForeground = state == AppLifecycleState.resumed;
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       pause();
@@ -103,6 +127,7 @@ class TimerController extends ChangeNotifier {
   @override
   void dispose() {
     _timer?.cancel();
+    _cancelTimerNotification('dispose');
     super.dispose();
   }
 
@@ -121,8 +146,11 @@ class TimerController extends ChangeNotifier {
       _remainingSeconds = 0;
       _runState = TimerRunState.completed;
       _timer?.cancel();
+      _endTime = null;
+      _cancelTimerNotification('complete');
       notifyListeners();
       _audioService?.playCompletionCue();
+      _showCompletionBanner();
     } else {
       _remainingSeconds -= 1;
       notifyListeners();
@@ -140,5 +168,40 @@ class TimerController extends ChangeNotifier {
     final int minutes = seconds ~/ 60;
     final int remainder = seconds % 60;
     return '${minutes.toString().padLeft(2, '0')}:${remainder.toString().padLeft(2, '0')}';
+  }
+
+  void _scheduleTimerNotification(String reason) {
+    final NotificationService? service = _notificationService;
+    if (service == null || _endTime == null) {
+      _log('Skipping schedule ($reason); notification service or end time missing.');
+      return;
+    }
+    _log('Scheduling timer notification ($reason) for $_endTime');
+    unawaited(
+      service.scheduleTimerCompletionNotification(
+        scheduledTime: _endTime!,
+      ),
+    );
+  }
+
+  void _cancelTimerNotification(String reason) {
+    final NotificationService? service = _notificationService;
+    if (service == null) {
+      return;
+    }
+    _log('Cancelling timer notification ($reason).');
+    unawaited(service.cancelScheduledTimerNotification());
+  }
+
+  void _log(String message) {
+    debugPrint('[TimerController] $message');
+  }
+
+  void _showCompletionBanner() {
+    final bool notificationsEnabled = _notificationsEnabledResolver?.call() ?? true;
+    if (!_isAppInForeground || !notificationsEnabled) {
+      return;
+    }
+    _bannerController?.show(CompletionBannerType.timer);
   }
 }

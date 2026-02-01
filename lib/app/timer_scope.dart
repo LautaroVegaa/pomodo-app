@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
 
 import '../features/timer/timer_controller.dart';
+import '../features/settings/settings_controller.dart';
 import '../services/completion_audio_service.dart';
+import '../services/completion_banner_controller.dart';
+import '../services/notification_service.dart';
 
 class TimerScope extends StatefulWidget {
   const TimerScope({
     super.key,
     required this.child,
     required this.audioService,
+    required this.notificationService,
+    required this.settingsController,
+    required this.bannerController,
   });
 
   final Widget child;
   final CompletionAudioService audioService;
+  final NotificationService notificationService;
+  final SettingsController settingsController;
+  final CompletionBannerController bannerController;
 
   static TimerController of(BuildContext context) {
     final _TimerInherited? inherited = context
@@ -31,7 +40,12 @@ class _TimerScopeState extends State<TimerScope> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _controller = TimerController(audioService: widget.audioService);
+    _controller = TimerController(
+      audioService: widget.audioService,
+      notificationService: widget.notificationService,
+      notificationsEnabledResolver: () => widget.settingsController.notificationsEnabled,
+      bannerController: widget.bannerController,
+    );
   }
 
   @override
