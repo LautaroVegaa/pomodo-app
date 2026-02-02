@@ -15,13 +15,15 @@ class TimerController extends ChangeNotifier {
     NotificationService? notificationService,
     CompletionBannerController? bannerController,
     bool Function()? notificationsEnabledResolver,
-  }) : _selectedMinutes = _normalizeMinutes(initialMinutes),
-       _audioService = audioService,
-       _notificationService = notificationService,
-       _bannerController = bannerController,
-       _notificationsEnabledResolver = notificationsEnabledResolver {
+    DateTime Function()? nowProvider,
+  })  : _selectedMinutes = _normalizeMinutes(initialMinutes),
+        _audioService = audioService,
+        _notificationService = notificationService,
+        _bannerController = bannerController,
+        _notificationsEnabledResolver = notificationsEnabledResolver,
+        _nowProvider = nowProvider ?? DateTime.now {
     _totalSeconds = _selectedMinutes * 60;
-    _remainingSeconds = _totalSeconds;
+    _cachedRemainingSeconds = _totalSeconds;
   }
 
   static const int minMinutes = 5;
@@ -35,12 +37,13 @@ class TimerController extends ChangeNotifier {
   final NotificationService? _notificationService;
   final CompletionBannerController? _bannerController;
   final bool Function()? _notificationsEnabledResolver;
+  final DateTime Function() _nowProvider;
   DateTime? _endTime;
   bool _isAppInForeground = true;
 
   int _selectedMinutes;
   late int _totalSeconds;
-  late int _remainingSeconds;
+  late int _cachedRemainingSeconds;
   TimerRunState _runState = TimerRunState.idle;
 
   int get selectedMinutes => _selectedMinutes;
@@ -49,15 +52,16 @@ class TimerController extends ChangeNotifier {
   bool get isPaused => _runState == TimerRunState.paused;
   bool get canAdjustDuration =>
       _runState == TimerRunState.idle || _runState == TimerRunState.completed;
+  int get remainingSeconds => _computeRemainingSeconds();
 
   double get progress {
     if (_totalSeconds == 0) return 0;
     final double completed =
-        (_totalSeconds - _remainingSeconds) / _totalSeconds.toDouble();
+        (_totalSeconds - remainingSeconds) / _totalSeconds.toDouble();
     return completed.clamp(0, 1);
   }
 
-  String get formattedRemaining => _formatTime(_remainingSeconds);
+  String get formattedRemaining => _formatTime(remainingSeconds);
 
   void setDurationMinutes(int minutes) {
     if (!canAdjustDuration) return;
@@ -65,7 +69,7 @@ class TimerController extends ChangeNotifier {
     if (normalized == _selectedMinutes) return;
     _selectedMinutes = normalized;
     _totalSeconds = _selectedMinutes * 60;
-    _remainingSeconds = _totalSeconds;
+    _cachedRemainingSeconds = _totalSeconds;
     _runState = TimerRunState.idle;
     notifyListeners();
   }
@@ -78,49 +82,59 @@ class TimerController extends ChangeNotifier {
     }
     if (_runState == TimerRunState.completed ||
         _runState == TimerRunState.idle) {
-      _remainingSeconds = _totalSeconds;
+      _cachedRemainingSeconds = _totalSeconds;
     }
     _runState = TimerRunState.running;
-    _endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
+    _endTime = _now().add(Duration(seconds: _cachedRemainingSeconds));
     _cancelTimerNotification('start');
     _scheduleTimerNotification('start');
-    notifyListeners();
+    _notify();
     _ensureTimer();
   }
 
   void pause() {
     if (_runState != TimerRunState.running) return;
+    _cachedRemainingSeconds = remainingSeconds;
     _runState = TimerRunState.paused;
     _timer?.cancel();
     _endTime = null;
     _cancelTimerNotification('pause');
-    notifyListeners();
+    _notify();
   }
 
   void resume() {
     if (_runState != TimerRunState.paused) return;
     _runState = TimerRunState.running;
-    _endTime = DateTime.now().add(Duration(seconds: _remainingSeconds));
+    _endTime = _now().add(Duration(seconds: _cachedRemainingSeconds));
     _cancelTimerNotification('resume');
     _scheduleTimerNotification('resume');
-    notifyListeners();
+    _notify();
     _ensureTimer();
   }
 
   void stop() {
     _timer?.cancel();
     _runState = TimerRunState.idle;
-    _remainingSeconds = _totalSeconds;
+    _cachedRemainingSeconds = _totalSeconds;
     _endTime = null;
     _cancelTimerNotification('stop');
-    notifyListeners();
+    _notify();
   }
 
   void handleLifecycleChange(AppLifecycleState state) {
     _isAppInForeground = state == AppLifecycleState.resumed;
+    if (state == AppLifecycleState.resumed) {
+      _cancelTimerNotification('lifecycle_resumed');
+      _reconcileElapsedTime();
+      return;
+    }
+
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
-      pause();
+      if (_runState == TimerRunState.running && _endTime != null) {
+        _timer?.cancel();
+        _scheduleTimerNotification('lifecycle_${state.name}');
+      }
     }
   }
 
@@ -142,18 +156,11 @@ class TimerController extends ChangeNotifier {
       _timer?.cancel();
       return;
     }
-    if (_remainingSeconds <= 1) {
-      _remainingSeconds = 0;
-      _runState = TimerRunState.completed;
-      _timer?.cancel();
-      _endTime = null;
-      _cancelTimerNotification('complete');
-      notifyListeners();
-      _audioService?.playCompletionCue();
-      _showCompletionBanner();
+    final int seconds = remainingSeconds;
+    if (seconds <= 0) {
+      _completeTimer();
     } else {
-      _remainingSeconds -= 1;
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -204,4 +211,47 @@ class TimerController extends ChangeNotifier {
     }
     _bannerController?.show(CompletionBannerType.timer);
   }
+
+  void _completeTimer() {
+    _runState = TimerRunState.completed;
+    _timer?.cancel();
+    _endTime = null;
+    _cachedRemainingSeconds = 0;
+    _cancelTimerNotification('complete');
+    _notify();
+    if (_isAppInForeground) {
+      _audioService?.playCompletionCue();
+    }
+    _showCompletionBanner();
+  }
+
+  int _computeRemainingSeconds() {
+    if (_runState == TimerRunState.running && _endTime != null) {
+      final int delta = _endTime!.difference(_now()).inSeconds;
+      return delta > 0 ? delta : 0;
+    }
+    return _cachedRemainingSeconds;
+  }
+
+  void _reconcileElapsedTime() {
+    if (_runState != TimerRunState.running) {
+      _notify();
+      return;
+    }
+    if (_endTime == null) {
+      return;
+    }
+    if (remainingSeconds <= 0) {
+      _completeTimer();
+    } else {
+      _notify();
+      _ensureTimer();
+    }
+  }
+
+  void _notify() {
+    notifyListeners();
+  }
+
+  DateTime _now() => _nowProvider();
 }

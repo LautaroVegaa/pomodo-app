@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../app/app_blocking_scope.dart';
 import '../../app/app_theme.dart';
 import '../../app/pomodoro_scope.dart';
 import '../../app/settings_scope.dart';
+import '../../services/app_blocking/app_blocking_controller.dart';
+import '../app_blocking/app_blocking_page.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
 import 'settings_controller.dart';
@@ -14,7 +17,8 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final PomodoroController controller = PomodoroScope.of(context);
     final SettingsController settings = SettingsScope.of(context);
-    final Listenable combined = Listenable.merge([controller, settings]);
+    final AppBlockingController appBlocking = AppBlockingScope.of(context);
+    final Listenable combined = Listenable.merge([controller, settings, appBlocking]);
     return AnimatedBuilder(
       animation: combined,
       builder: (context, _) {
@@ -29,6 +33,7 @@ class SettingsPage extends StatelessWidget {
                 child: _SettingsList(
                   controller: controller,
                   settings: settings,
+                  appBlocking: appBlocking,
                 ),
               ),
             ],
@@ -72,10 +77,12 @@ class _SettingsList extends StatelessWidget {
   const _SettingsList({
     required this.controller,
     required this.settings,
+    required this.appBlocking,
   });
 
   final PomodoroController controller;
   final SettingsController settings;
+  final AppBlockingController appBlocking;
 
   @override
   Widget build(BuildContext context) {
@@ -139,15 +146,28 @@ class _SettingsList extends StatelessWidget {
                   onChanged: settings.setHapticsEnabled,
                 ),
               ),
+              _SettingsRowData(
+                label: 'App Blocking',
+                value: appBlocking.mode.label,
+                onTap: () => _openAppBlocking(context),
+              ),
             ],
           ),
           const SizedBox(height: 20),
-          const _SettingsCard(
+          _SettingsCard(
             title: 'About',
             rows: [
-              _SettingsRowData(label: 'Version', value: '0.1.0'),
-              _SettingsRowData(label: 'Privacy', value: 'View'),
-              _SettingsRowData(label: 'Terms', value: 'View'),
+              const _SettingsRowData(label: 'Version', value: '0.1.0'),
+              _SettingsRowData(
+                label: 'Privacy',
+                value: 'View',
+                onTap: () => _showComingSoonDialog(context, 'Privacy'),
+              ),
+              _SettingsRowData(
+                label: 'Terms',
+                value: 'View',
+                onTap: () => _showComingSoonDialog(context, 'Terms'),
+              ),
             ],
           ),
         ],
@@ -213,6 +233,44 @@ class _SettingsList extends StatelessWidget {
     if (value != null) {
       controller.setLongBreakEveryCycles(value);
     }
+  }
+
+  Future<void> _showComingSoonDialog(BuildContext context, String title) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) {
+        final textTheme = Theme.of(context).textTheme;
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceMuted.withValues(alpha: 0.95),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            title,
+            style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
+          content: Text(
+            'Coming soon',
+            style: textTheme.bodyMedium?.copyWith(
+              color: AppColors.textPrimary.withValues(alpha: 0.85),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.textPrimary,
+              ),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _openAppBlocking(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const AppBlockingPage()),
+    );
   }
 }
 

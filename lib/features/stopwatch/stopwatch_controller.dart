@@ -5,8 +5,10 @@ import 'package:flutter/material.dart';
 enum StopwatchRunState { idle, running, paused }
 
 class StopwatchController extends ChangeNotifier {
-  StopwatchController();
+  StopwatchController({DateTime Function()? nowProvider})
+      : _nowProvider = nowProvider ?? DateTime.now;
 
+  final DateTime Function() _nowProvider;
   StopwatchRunState _runState = StopwatchRunState.idle;
   Duration _elapsed = Duration.zero;
   DateTime? _lastStartTime;
@@ -36,7 +38,7 @@ class StopwatchController extends ChangeNotifier {
     if (_runState == StopwatchRunState.idle) {
       _elapsed = Duration.zero;
     }
-    _lastStartTime = DateTime.now();
+    _lastStartTime = _now();
     _runState = StopwatchRunState.running;
     _startTicker();
     notifyListeners();
@@ -53,7 +55,7 @@ class StopwatchController extends ChangeNotifier {
 
   void resume() {
     if (_runState != StopwatchRunState.paused) return;
-    _lastStartTime = DateTime.now();
+    _lastStartTime = _now();
     _runState = StopwatchRunState.running;
     _startTicker();
     notifyListeners();
@@ -72,11 +74,11 @@ class StopwatchController extends ChangeNotifier {
     if (state == AppLifecycleState.inactive ||
         state == AppLifecycleState.paused) {
       _elapsed = _currentElapsed();
-      _lastStartTime = DateTime.now();
+      _lastStartTime = _now();
     }
     if (state == AppLifecycleState.resumed) {
       _elapsed = _currentElapsed();
-      _lastStartTime = DateTime.now();
+      _lastStartTime = _now();
       _startTicker();
       notifyListeners();
     }
@@ -86,7 +88,7 @@ class StopwatchController extends ChangeNotifier {
     if (_lastStartTime == null) {
       return _elapsed;
     }
-    final Duration delta = DateTime.now().difference(_lastStartTime!);
+    final Duration delta = _now().difference(_lastStartTime!);
     return _elapsed + delta;
   }
 
@@ -100,6 +102,8 @@ class StopwatchController extends ChangeNotifier {
       notifyListeners();
     });
   }
+
+  DateTime _now() => _nowProvider();
 
   @override
   void dispose() {

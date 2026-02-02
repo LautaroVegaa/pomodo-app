@@ -25,6 +25,7 @@ class PomodoroController extends ChangeNotifier {
     NotificationService? notificationService,
      CompletionBannerController? bannerController,
      bool Function()? notificationsEnabledResolver,
+     DateTime Function()? nowProvider,
   }) : _storage = storage ?? PomodoroStorage(),
        _isHapticsEnabled = hapticsEnabledResolver,
        _isSoundsEnabled = soundsEnabledResolver,
@@ -32,7 +33,8 @@ class PomodoroController extends ChangeNotifier {
        _audioService = audioService,
        _notificationService = notificationService,
        _bannerController = bannerController,
-       _notificationsEnabledResolver = notificationsEnabledResolver;
+       _notificationsEnabledResolver = notificationsEnabledResolver,
+       _nowProvider = nowProvider ?? DateTime.now;
 
   final PomodoroStorage _storage;
   Future<void>? _initialization;
@@ -43,6 +45,7 @@ class PomodoroController extends ChangeNotifier {
   final NotificationService? _notificationService;
   final CompletionBannerController? _bannerController;
   final bool Function()? _notificationsEnabledResolver;
+  final DateTime Function() _nowProvider;
 
   static const int _focusMin = 5;
   static const int _focusMax = 90;
@@ -108,7 +111,7 @@ class PomodoroController extends ChangeNotifier {
   void start() {
     if (_runState != RunState.idle) return;
     _cachedRemainingSeconds = _totalSeconds;
-    _endTime = DateTime.now().add(Duration(seconds: _cachedRemainingSeconds));
+    _endTime = _now().add(Duration(seconds: _cachedRemainingSeconds));
     _runState = RunState.running;
     _cancelPomodoroNotification('start');
     _notify();
@@ -128,7 +131,7 @@ class PomodoroController extends ChangeNotifier {
 
   void resume() {
     if (_runState != RunState.paused) return;
-    _endTime = DateTime.now().add(Duration(seconds: _cachedRemainingSeconds));
+    _endTime = _now().add(Duration(seconds: _cachedRemainingSeconds));
     _runState = RunState.running;
     _cancelPomodoroNotification('resume');
     _notify();
@@ -179,6 +182,7 @@ class PomodoroController extends ChangeNotifier {
     if (state == AppLifecycleState.paused ||
       state == AppLifecycleState.inactive) {
       if (_runState == RunState.running && _endTime != null) {
+        _timer?.cancel();
         _schedulePomodoroNotification('lifecycle_${state.name}');
       }
     }
@@ -244,7 +248,7 @@ class PomodoroController extends ChangeNotifier {
     if (completedFocus) {
       final int completedMinutes = (_totalSeconds ~/ 60).clamp(0, 1440).toInt();
       _statsController?.recordFocusCompletion(
-        completionTime: DateTime.now(),
+        completionTime: _now(),
         focusMinutes: completedMinutes,
       );
       _cycleCount += 1;
@@ -263,7 +267,7 @@ class PomodoroController extends ChangeNotifier {
     _sessionType = type;
     _totalSeconds = targetDuration;
     _cachedRemainingSeconds = targetDuration;
-    _endTime = DateTime.now().add(Duration(seconds: targetDuration));
+    _endTime = _now().add(Duration(seconds: targetDuration));
     _runState = RunState.running;
     _cancelPomodoroNotification('begin_session');
     _notify();
@@ -313,7 +317,7 @@ class PomodoroController extends ChangeNotifier {
 
   int _computeRemainingSeconds() {
     if (_runState == RunState.running && _endTime != null) {
-      final int delta = _endTime!.difference(DateTime.now()).inSeconds;
+      final int delta = _endTime!.difference(_now()).inSeconds;
       return delta > 0 ? delta : 0;
     }
     return _cachedRemainingSeconds;
@@ -323,7 +327,7 @@ class PomodoroController extends ChangeNotifier {
     if (_isHapticsEnabled?.call() ?? true) {
       HapticFeedback.mediumImpact();
     }
-    if (_isSoundsEnabled?.call() ?? false) {
+    if ((_isSoundsEnabled?.call() ?? false) && _isAppInForeground) {
       playCue(cue);
     }
   }
@@ -451,4 +455,6 @@ class PomodoroController extends ChangeNotifier {
     final bool notificationsEnabled = _notificationsEnabledResolver?.call() ?? true;
     return _isAppInForeground && notificationsEnabled;
   }
+
+  DateTime _now() => _nowProvider();
 }

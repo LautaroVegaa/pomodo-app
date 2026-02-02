@@ -52,6 +52,10 @@ void main() {
     expect(find.text('Pomodō.'), findsOneWidget);
     expect(find.text('Focus'), findsWidgets);
     expect(find.text('25:00'), findsOneWidget);
+
+    final homeScroll = find.byType(ListView).first;
+    await tester.drag(homeScroll, const Offset(0, -400));
+    await tester.pumpAndSettle();
     expect(
       find.textContaining('El foco es un músculo'),
       findsOneWidget,

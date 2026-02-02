@@ -33,9 +33,11 @@ void main() {
       fakeAsync((async) {
         final storage = _FakePomodoroStorage();
         final stats = StatsController(storage: _FakeStatsStorage());
+        final clock = _TestClock();
         final controller = PomodoroController(
           storage: storage,
           statsController: stats,
+          nowProvider: clock.now,
         );
         controller.setFocusMinutes(5);
         controller.setBreakMinutes(1);
@@ -43,14 +45,14 @@ void main() {
         controller.setLongBreakEveryCycles(8);
 
         controller.start();
-        async.elapse(const Duration(minutes: 5));
+        clock.advance(async, const Duration(minutes: 5));
         expect(controller.sessionType, SessionType.breakSession);
         expect(controller.totalSeconds, equals(60));
 
-        async.elapse(const Duration(minutes: 1));
+        clock.advance(async, const Duration(minutes: 1));
         expect(controller.sessionType, SessionType.focus);
 
-        async.elapse(const Duration(minutes: 5));
+        clock.advance(async, const Duration(minutes: 5));
         expect(controller.sessionType, SessionType.breakSession);
         expect(controller.totalSeconds, equals(60));
       });
@@ -60,9 +62,11 @@ void main() {
       fakeAsync((async) {
         final storage = _FakePomodoroStorage();
         final stats = StatsController(storage: _FakeStatsStorage());
+        final clock = _TestClock();
         final controller = PomodoroController(
           storage: storage,
           statsController: stats,
+          nowProvider: clock.now,
         );
         controller.setFocusMinutes(5);
         controller.setBreakMinutes(1);
@@ -70,16 +74,29 @@ void main() {
         controller.setLongBreakEveryCycles(2);
 
         controller.start();
-        async.elapse(const Duration(minutes: 5));
+        clock.advance(async, const Duration(minutes: 5));
         expect(controller.sessionType, SessionType.breakSession);
         expect(controller.isLongBreakSession, isFalse);
 
-        async.elapse(const Duration(minutes: 1));
-        async.elapse(const Duration(minutes: 5));
+        clock.advance(async, const Duration(minutes: 1));
+        clock.advance(async, const Duration(minutes: 5));
         expect(controller.sessionType, SessionType.breakSession);
         expect(controller.isLongBreakSession, isTrue);
         expect(controller.totalSeconds, equals(controller.longBreakMinutes * 60));
       });
     });
   });
+}
+
+class _TestClock {
+  _TestClock() : _current = DateTime(2024, 1, 1);
+
+  DateTime _current;
+
+  DateTime now() => _current;
+
+  void advance(FakeAsync async, Duration delta) {
+    _current = _current.add(delta);
+    async.elapse(delta);
+  }
 }
