@@ -5,16 +5,39 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core_platform_interface/test.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:pomodo_app/app/app.dart';
+import 'package:pomodo_app/firebase_options.dart';
 import 'package:pomodo_app/services/notification_service.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  setUpAll(() async {
+    setupFirebaseCoreMocks();
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } on FirebaseException catch (error) {
+      if (error.code != 'duplicate-app') {
+        rethrow;
+      }
+    }
+  });
+
   testWidgets('Editorial onboarding advances through screens', (tester) async {
     final notificationService = NotificationService.test();
-    await tester.pumpWidget(PomodoApp(notificationService: notificationService));
+    await tester.pumpWidget(
+      PomodoApp(
+        notificationService: notificationService,
+        startSignedIn: false,
+      ),
+    );
 
     expect(
       find.textContaining('Your attention', findRichText: true),
