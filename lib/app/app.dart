@@ -46,7 +46,7 @@ class _PomodoAppState extends State<PomodoApp> {
   late final AppBlockingController _appBlockingController;
   late final AuthController _authController;
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  bool _initialShellQueued = false;
+  bool _showingShell = false;
 
   @override
   void initState() {
@@ -71,14 +71,16 @@ class _PomodoAppState extends State<PomodoApp> {
     unawaited(_appBlockingController.initialize());
     _authController = AuthController(authService: AuthService());
     unawaited(_authController.initialize());
-    _initialShellQueued = widget.startSignedIn;
+    _authController.addListener(_handleAuthStateChange);
     if (widget.startSignedIn) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _navigateToShell(clearStack: true));
+      _showingShell = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _pushShell(clearStack: true));
     }
   }
 
   @override
   void dispose() {
+    _authController.removeListener(_handleAuthStateChange);
     unawaited(_audioService.dispose());
     _statsController.dispose();
     _settingsController.dispose();
@@ -135,10 +137,21 @@ class _PomodoAppState extends State<PomodoApp> {
     );
   }
 
-  void _navigateToShell({bool clearStack = false}) {
-    if (!_initialShellQueued) {
-      return;
+  void _handleAuthStateChange() {
+    if (_authController.canAccessApp) {
+      if (!_showingShell) {
+        _showingShell = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _pushShell(clearStack: true));
+      }
+    } else {
+      if (_showingShell) {
+        _showingShell = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) => _showOnboarding());
+      }
     }
+  }
+
+  void _pushShell({bool clearStack = false}) {
     final navigator = _navigatorKey.currentState;
     if (navigator == null) {
       return;
@@ -149,6 +162,16 @@ class _PomodoAppState extends State<PomodoApp> {
     } else {
       navigator.pushReplacement(route);
     }
-    _initialShellQueued = false;
+  }
+
+  void _showOnboarding() {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) {
+      return;
+    }
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const EditorialOnboardingPage()),
+      (_) => false,
+    );
   }
 }

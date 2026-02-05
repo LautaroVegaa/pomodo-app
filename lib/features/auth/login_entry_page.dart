@@ -1,55 +1,112 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_theme.dart';
-import '../../app/tab_shell.dart';
+import '../../app/auth_scope.dart';
+import '../../services/auth/auth_controller.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 
-class LoginEntryPage extends StatelessWidget {
+class LoginEntryPage extends StatefulWidget {
   const LoginEntryPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return OnboardingScaffold(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.topLeft,
-              child: _Headline(),
-            ),
-          ),
-          const SizedBox(height: 48),
-          _EntryButton(
-            label: 'Continue with Apple',
-            prefix: const Icon(Icons.apple),
-            onTap: () => _goHome(context),
-          ),
-          const SizedBox(height: 16),
-          _EntryButton(
-            label: 'Continue with Google',
-            prefix: Text(
-              'G',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            onTap: () => _goHome(context),
-          ),
-          const SizedBox(height: 16),
-          _EntryButton(
-            label: 'Continue without account',
-            muted: true,
-            onTap: () => _goHome(context),
-          ),
-        ],
-      ),
-    );
+  State<LoginEntryPage> createState() => _LoginEntryPageState();
+}
+
+class _LoginEntryPageState extends State<LoginEntryPage> {
+  AuthController? _controller;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextController = AuthScope.of(context);
+    if (_controller == nextController) {
+      return;
+    }
+    _controller?.removeListener(_handleAuthUpdates);
+    _controller = nextController..addListener(_handleAuthUpdates);
   }
 
-  void _goHome(BuildContext context) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const TabShell()),
+  @override
+  void dispose() {
+    _controller?.removeListener(_handleAuthUpdates);
+    super.dispose();
+  }
+
+  void _handleAuthUpdates() {
+    if (!mounted) {
+      return;
+    }
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    final String? message = controller.errorMessage;
+    if (message == null) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+    controller.clearError();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    if (controller == null) {
+      return const SizedBox.shrink();
+    }
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final bool appleBusy = controller.isProviderBusy(AuthProvider.apple);
+        final bool googleBusy = controller.isProviderBusy(AuthProvider.google);
+        final bool isBusy = controller.isBusy;
+        return OnboardingScaffold(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: _Headline(),
+                ),
+              ),
+              const SizedBox(height: 48),
+              _EntryButton(
+                label: 'Continue with Apple',
+                prefix: const Icon(Icons.apple),
+                loading: appleBusy,
+                enabled: !isBusy,
+                onTap: () => controller.signInWithApple(),
+              ),
+              const SizedBox(height: 16),
+              _EntryButton(
+                label: 'Continue with Google',
+                prefix: Text(
+                  'G',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                loading: googleBusy,
+                enabled: !isBusy,
+                onTap: () => controller.signInWithGoogle(),
+              ),
+              const SizedBox(height: 16),
+              _EntryButton(
+                label: 'Continue without account',
+                muted: true,
+                enabled: !isBusy,
+                onTap: () => controller.continueWithoutAccount(),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -120,12 +177,16 @@ class _EntryButton extends StatelessWidget {
     required this.label,
     this.prefix,
     this.muted = false,
+    this.loading = false,
+    this.enabled = true,
     required this.onTap,
   });
 
   final String label;
   final Widget? prefix;
   final bool muted;
+  final bool loading;
+  final bool enabled;
   final VoidCallback onTap;
 
   @override
@@ -137,8 +198,9 @@ class _EntryButton extends StatelessWidget {
     final Color textColor =
         muted ? AppColors.textPrimary.withValues(alpha: 0.85) : AppColors.textPrimary;
 
+    final bool canTap = enabled && !loading;
     return GestureDetector(
-      onTap: onTap,
+      onTap: canTap ? onTap : null,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
@@ -176,9 +238,21 @@ class _EntryButton extends StatelessWidget {
                     ),
               ),
             ),
-            if (prefix != null)
-              const SizedBox(
+            if (prefix != null || loading)
+              SizedBox(
                 width: 24,
+                child: Center(
+                  child: loading
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(textColor),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
               ),
           ],
         ),

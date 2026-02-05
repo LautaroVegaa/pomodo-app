@@ -98,11 +98,9 @@ class _ModeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isRecommended = controller.mode == AppBlockingMode.recommended;
     final bool isBusy = controller.isBusy;
     final bool requiresAuthorization = controller.requiresAuthorization;
     final bool canInteract = !isBusy && !requiresAuthorization;
-    final String buttonLabel = isRecommended ? 'Review selection' : 'Choose apps';
 
     return Container(
       width: double.infinity,
@@ -116,43 +114,24 @@ class _ModeCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Mode',
+            'Choose apps',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w600,
                   color: AppColors.textPrimary,
                 ),
           ),
           const SizedBox(height: 18),
-          Row(
-            children: [
-              _ModeOption(
-                label: 'Recommended',
-                selected: isRecommended,
-                onTap: () => controller.setMode(AppBlockingMode.recommended),
-              ),
-              const SizedBox(width: 12),
-              _ModeOption(
-                label: 'Custom',
-                selected: !isRecommended,
-                onTap: () => controller.setMode(AppBlockingMode.custom),
-              ),
-            ],
+          Text(
+            'Pick the exact apps or sites to block during focus sessions.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textPrimary.withValues(alpha: 0.65),
+                ),
           ),
-          if (isRecommended) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Blocks common distractions (social, entertainment, games).',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textPrimary.withValues(alpha: 0.65),
-                  ),
-            ),
-          ],
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed:
-                  canInteract ? () => unawaited(controller.presentPicker()) : null,
+              onPressed: canInteract ? () => _handleChooseApps(context) : null,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.accentBlue.withValues(alpha: 0.9),
                 foregroundColor: AppColors.buttonTextDark,
@@ -165,7 +144,7 @@ class _ModeCard extends StatelessWidget {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(buttonLabel),
+                  : const Text('Choose apps'),
             ),
           ),
           const SizedBox(height: 8),
@@ -179,74 +158,57 @@ class _ModeCard extends StatelessWidget {
       ),
     );
   }
-}
 
-class _ModeOption extends StatelessWidget {
-  const _ModeOption({required this.label, required this.selected, required this.onTap});
+  Future<void> _handleChooseApps(BuildContext context) async {
+    await controller.ensureGuidanceStateLoaded();
+    if (!context.mounted) {
+      return;
+    }
+    if (!controller.hasSeenGuidance) {
+      final bool acknowledged = await _showGuidanceDialog(context);
+      if (!acknowledged) {
+        return;
+      }
+      await controller.markGuidanceSeen();
+    }
+    unawaited(controller.presentPicker());
+  }
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.accentBlue.withValues(alpha: 0.18)
-                : Colors.white.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: selected
-                  ? AppColors.accentBlue.withValues(alpha: 0.7)
-                  : Colors.white.withValues(alpha: 0.08),
-              width: 1.2,
-            ),
+  Future<bool> _showGuidanceDialog(BuildContext context) async {
+    final ThemeData theme = Theme.of(context);
+    final bool? result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surfaceMuted.withValues(alpha: 0.95),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Quick tip',
+            style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
           ),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 14,
-                  height: 14,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected
-                          ? AppColors.accentBlue.withValues(alpha: 0.9)
-                          : Colors.white.withValues(alpha: 0.5),
-                      width: 1.4,
-                    ),
-                  ),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.all(2.4),
-                    decoration: BoxDecoration(
-                      color: selected ? AppColors.accentBlue.withValues(alpha: 0.9) : Colors.transparent,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
+          content: Text(
+            'Recommended approach: either block all apps (easiest) or block only social media.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+                  color: AppColors.textPrimary.withValues(alpha: 0.8),
                 ),
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textPrimary,
-                      ),
-                ),
-              ],
-            ),
           ),
-        ),
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.buttonTextDark,
+                backgroundColor: AppColors.accentBlue.withValues(alpha: 0.9),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
     );
+    return result ?? false;
   }
 }
 

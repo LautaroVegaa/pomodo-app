@@ -12,15 +12,40 @@
           "package_name": "com.example.pomodo_app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "495779418968-9biqkhj0b487rdfj66j4stne8vp09ma4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pomodo_app",
+            "certificate_hash": "9b84a03e93decfabad04f9d52be0a178e83201a2"
+          }
+        },
+        {
+          "client_id": "495779418968-gerhus8pb3kd3sb5qqq4mkek9qahrmek.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyBSR4cyL9ejg_jSKEW6H7G5tfK9AbSB0O4"
+          "current_key": "AIzaSyBe5bGRLLqHdZxfaOduyr9sh8jWUrkgIzQ"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "495779418968-gerhus8pb3kd3sb5qqq4mkek9qahrmek.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "495779418968-rr1fuebr6tsh3jafmgi61v3ie497e33f.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.pomodoApp"
+              }
+            }
+          ]
         }
       }
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_blocking_scope.dart';
 import '../../app/app_theme.dart';
+import '../../app/auth_scope.dart';
 import '../../app/pomodoro_scope.dart';
 import '../../app/settings_scope.dart';
 import '../../services/app_blocking/app_blocking_controller.dart';
@@ -9,6 +10,7 @@ import '../app_blocking/app_blocking_page.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
 import 'settings_controller.dart';
+import '../../services/auth/auth_controller.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -18,7 +20,8 @@ class SettingsPage extends StatelessWidget {
     final PomodoroController controller = PomodoroScope.of(context);
     final SettingsController settings = SettingsScope.of(context);
     final AppBlockingController appBlocking = AppBlockingScope.of(context);
-    final Listenable combined = Listenable.merge([controller, settings, appBlocking]);
+    final AuthController auth = AuthScope.of(context);
+    final Listenable combined = Listenable.merge([controller, settings, appBlocking, auth]);
     return AnimatedBuilder(
       animation: combined,
       builder: (context, _) {
@@ -34,6 +37,7 @@ class SettingsPage extends StatelessWidget {
                   controller: controller,
                   settings: settings,
                   appBlocking: appBlocking,
+                  auth: auth,
                 ),
               ),
             ],
@@ -78,11 +82,13 @@ class _SettingsList extends StatelessWidget {
     required this.controller,
     required this.settings,
     required this.appBlocking,
+    required this.auth,
   });
 
   final PomodoroController controller;
   final SettingsController settings;
   final AppBlockingController appBlocking;
+  final AuthController auth;
 
   @override
   Widget build(BuildContext context) {
@@ -123,6 +129,16 @@ class _SettingsList extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           _SettingsCard(
+            title: 'App Blocking',
+            rows: [
+              _SettingsRowData(
+                label: 'Choose apps',
+                onTap: () => _openAppBlocking(context),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsCard(
             title: 'Experience',
             rows: [
               _SettingsRowData(
@@ -146,11 +162,6 @@ class _SettingsList extends StatelessWidget {
                   onChanged: settings.setHapticsEnabled,
                 ),
               ),
-              _SettingsRowData(
-                label: 'App Blocking',
-                value: appBlocking.mode.label,
-                onTap: () => _openAppBlocking(context),
-              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -170,6 +181,22 @@ class _SettingsList extends StatelessWidget {
               ),
             ],
           ),
+          if (auth.canSignOut) ...[
+            const SizedBox(height: 20),
+            _SettingsCard(
+              title: 'Account',
+              rows: [
+                _SettingsRowData(
+                  label: 'Sign out',
+                  trailing: Icon(
+                    Icons.logout_rounded,
+                    color: AppColors.textPrimary.withValues(alpha: 0.9),
+                  ),
+                  onTap: () => _handleSignOut(context),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -271,6 +298,23 @@ class _SettingsList extends StatelessWidget {
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => const AppBlockingPage()),
     );
+  }
+
+  Future<void> _handleSignOut(BuildContext context) async {
+    await auth.signOut();
+    if (!context.mounted) {
+      return;
+    }
+    final String? message = auth.errorMessage;
+    if (message != null) {
+      final messenger = ScaffoldMessenger.of(context);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+      auth.clearError();
+    }
   }
 }
 

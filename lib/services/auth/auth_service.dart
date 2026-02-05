@@ -39,7 +39,9 @@ class AuthService {
       if (idToken == null) {
         throw const AuthFailure('google-missing-token', 'Missing Google ID token.');
       }
+      final String? accessToken = await _fetchAccessToken(googleUser);
       final credential = GoogleAuthProvider.credential(
+        accessToken: accessToken,
         idToken: idToken,
       );
       final result = await _firebaseAuth.signInWithCredential(credential);
@@ -81,8 +83,16 @@ class AuthService {
       if (identityToken == null) {
         throw const AuthFailure('apple-missing-token', 'Missing Apple identity token.');
       }
+      final String? authorizationCode = appleCredential.authorizationCode;
+      if (authorizationCode == null || authorizationCode.isEmpty) {
+        throw const AuthFailure(
+          'apple-missing-auth-code',
+          'Missing Apple authorization code.',
+        );
+      }
       final credential = OAuthProvider('apple.com').credential(
         idToken: identityToken,
+        accessToken: authorizationCode,
         rawNonce: rawNonce,
       );
       final result = await _firebaseAuth.signInWithCredential(credential);
@@ -125,6 +135,17 @@ class AuthService {
       await _googleSignIn.signOut();
     } catch (_) {
       // Ignore sign-out issues; Firebase sign-out will proceed regardless.
+    }
+  }
+
+  Future<String?> _fetchAccessToken(GoogleSignInAccount account) async {
+    try {
+      final GoogleSignInClientAuthorization? authorization =
+          await account.authorizationClient.authorizationForScopes(const <String>['email']);
+      return authorization?.accessToken;
+    } catch (error) {
+      debugPrint('[AuthService] Unable to fetch Google access token: $error');
+      return null;
     }
   }
 

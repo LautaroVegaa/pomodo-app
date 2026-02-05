@@ -69,7 +69,7 @@ void main() {
     expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Continue without account'), findsOneWidget);
 
-    await tester.tap(find.text('Continue with Apple'));
+    await tester.tap(find.text('Continue without account'));
     await tester.pumpAndSettle();
 
     expect(find.text('Pomodō.'), findsOneWidget);

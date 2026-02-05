@@ -2,36 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-
-enum AppBlockingMode {
-  recommended,
-  custom;
-
-  static AppBlockingMode fromString(String? value) {
-    final String normalized = value?.toLowerCase().trim() ?? '';
-    switch (normalized) {
-      case 'recommended':
-        return AppBlockingMode.recommended;
-      case 'custom':
-        return AppBlockingMode.custom;
-      case 'pomodoro':
-      case 'timer':
-      case 'stopwatch':
-        return AppBlockingMode.recommended;
-      default:
-        return AppBlockingMode.recommended;
-    }
-  }
-
-  String toWire() => name;
-}
-
-extension AppBlockingModeLabel on AppBlockingMode {
-  String get label => switch (this) {
-        AppBlockingMode.recommended => 'Recommended',
-        AppBlockingMode.custom => 'Custom',
-      };
-}
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSelectionSummary {
   const AppSelectionSummary({this.applications = 0, this.categories = 0});
@@ -65,6 +36,7 @@ class AppBlockingController extends ChangeNotifier {
         _debugPlatformOverride = debugPlatformOverride;
 
   static const String _channelName = 'pomodo/app_blocking';
+  static const String _guidanceSeenKey = 'app_blocking_guidance_seen';
 
   final MethodChannel _channel;
   final TargetPlatform? _debugPlatformOverride;
@@ -72,21 +44,17 @@ class AppBlockingController extends ChangeNotifier {
   Future<void>? _initialization;
   bool _authorized = false;
   bool _isBusy = false;
-  AppBlockingMode _mode = AppBlockingMode.recommended;
-  AppSelectionSummary _recommendedSummary = const AppSelectionSummary();
-  AppSelectionSummary _customSummary = const AppSelectionSummary();
+  AppSelectionSummary _selectionSummary = const AppSelectionSummary();
+  bool _hasSeenGuidance = false;
+  Future<void>? _guidanceLoad;
 
   bool get isAuthorized => _authorized;
-  AppBlockingMode get mode => _mode;
   bool get isBusy => _isBusy;
   bool get isSupported => _isIosTarget;
-  bool get hasActiveSelection => _activeSummary.hasSelection;
+  bool get hasActiveSelection => _selectionSummary.hasSelection;
   bool get requiresAuthorization => _isIosTarget && !_authorized;
-  AppSelectionSummary get recommendedSummary => _recommendedSummary;
-  AppSelectionSummary get customSummary => _customSummary;
-
-  AppSelectionSummary get _activeSummary =>
-      _mode == AppBlockingMode.recommended ? _recommendedSummary : _customSummary;
+  AppSelectionSummary get selectionSummary => _selectionSummary;
+  bool get hasSeenGuidance => _hasSeenGuidance;
 
   bool get _isIosTarget {
     if (kIsWeb) return false;
@@ -101,11 +69,32 @@ class AppBlockingController extends ChangeNotifier {
   }
 
   Future<void> _initialize() async {
+    await ensureGuidanceStateLoaded();
     if (!_isIosTarget) {
       return;
     }
     await _invokeSafely<void>('clearAllOnStartup');
     await refreshState();
+  }
+
+  Future<void> ensureGuidanceStateLoaded() {
+    return _guidanceLoad ??= _loadGuidanceState();
+  }
+
+  Future<void> _loadGuidanceState() async {
+    bool seen = false;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      seen = prefs.getBool(_guidanceSeenKey) ?? false;
+    } catch (_) {
+      seen = false;
+    }
+    if (_hasSeenGuidance != seen) {
+      _hasSeenGuidance = seen;
+      notifyListeners();
+    } else {
+      _hasSeenGuidance = seen;
+    }
   }
 
   Future<void> refreshState() async {
@@ -133,35 +122,32 @@ class AppBlockingController extends ChangeNotifier {
     });
   }
 
-  Future<void> setMode(AppBlockingMode mode) async {
-    if (_mode == mode) {
-      return;
-    }
-    _mode = mode;
-    notifyListeners();
-    if (!_isIosTarget) {
-      return;
-    }
-    await _invokeSafely<void>('setBlockingMode', {'mode': mode.toWire()});
-  }
-
   Future<void> presentPicker() async {
     if (!_isIosTarget || !_authorized) {
       return;
     }
     await _withBusy(() async {
-        final Map<dynamic, dynamic>? payload = await _invokeSafely<Map<dynamic, dynamic>>(
-          'presentPicker',
-          {
-            'mode': _mode.toWire(),
-            'prefillRecommended': _mode == AppBlockingMode.recommended,
-          },
-        );
+      final Map<dynamic, dynamic>? payload =
+          await _invokeSafely<Map<dynamic, dynamic>>('presentPicker');
       if (payload != null) {
         _applySummaryPayload(payload);
         notifyListeners();
       }
     });
+  }
+
+  Future<void> markGuidanceSeen() async {
+    if (_hasSeenGuidance) {
+      return;
+    }
+    _hasSeenGuidance = true;
+    notifyListeners();
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_guidanceSeenKey, true);
+    } catch (_) {
+      // Ignore persistence failures; guidance will reappear if needed.
+    }
   }
 
   Future<bool> applyActiveSelection() async {
@@ -172,11 +158,7 @@ class AppBlockingController extends ChangeNotifier {
       await clearBlock();
       return false;
     }
-    final bool applied = await _invokeSafely<bool>(
-      'applyBlock',
-      {'mode': _mode.toWire()},
-        ) ??
-        false;
+    final bool applied = await _invokeSafely<bool>('applyBlock') ?? false;
     if (!applied) {
       await clearBlock();
     }
@@ -205,15 +187,13 @@ class AppBlockingController extends ChangeNotifier {
 
   void _applySummaryPayload(Map<dynamic, dynamic>? payload) {
     if (payload == null) {
-      _recommendedSummary = const AppSelectionSummary();
-      _customSummary = const AppSelectionSummary();
-      _mode = AppBlockingMode.recommended;
+      _selectionSummary = const AppSelectionSummary();
       return;
     }
-    _recommendedSummary =
-      AppSelectionSummary.fromMap(payload['recommended'] as Map<dynamic, dynamic>?);
-    _customSummary = AppSelectionSummary.fromMap(payload['custom'] as Map<dynamic, dynamic>?);
-    _mode = AppBlockingMode.fromString(payload['mode'] as String?);
+    final Map<dynamic, dynamic>? summaryMap =
+        (payload['custom'] as Map<dynamic, dynamic>?) ??
+        (payload['selection'] as Map<dynamic, dynamic>?);
+    _selectionSummary = AppSelectionSummary.fromMap(summaryMap);
   }
 
   Future<void> _withBusy(Future<void> Function() operation) async {
