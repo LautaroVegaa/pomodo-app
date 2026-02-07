@@ -4,15 +4,18 @@ import 'package:flutter/services.dart';
 
 import '../../app/app_theme.dart';
 import '../../app/pomodoro_scope.dart';
+import '../../app/quote_scope.dart';
 import '../../app/settings_scope.dart';
 import '../../app/stats_scope.dart';
-import 'active_session_page.dart';
+import '../quotes/pomodoro_quote_phase_tracker.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
 import '../pomodoro/session_labels.dart';
 import '../settings/settings_page.dart';
 import '../shared/widgets/animated_progress_bar.dart';
 import '../shared/widgets/card_blur.dart';
+import '../shared/widgets/flow_focus_shell.dart';
+import '../shared/widgets/quote_block.dart';
 import '../shared/widgets/stop_session_dialog.dart';
 import '../stats/stats_format.dart';
 import '../timer/timer_page.dart';
@@ -31,6 +34,7 @@ class _HomePageState extends State<HomePage> {
   static const double _bodyTopSpacing = 16;
 
   double _headerHeight = 0;
+  final PomodoroQuotePhaseTracker _quoteTracker = PomodoroQuotePhaseTracker();
 
   void _handleHeaderSizeChanged(Size size) {
     if (!mounted) {
@@ -51,8 +55,27 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final PomodoroController controller = PomodoroScope.of(context);
+    final settings = SettingsScope.of(context);
+    final quoteController = QuoteScope.of(context);
+    if (_quoteTracker.shouldRotate(
+      controller.sessionType,
+      controller.isLongBreakSession,
+    )) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        quoteController.rotate(reason: 'pomodoro_session_change');
+      });
+    }
+
+    Widget buildPomodoroCard() => _TimerCard(controller: controller);
+
     return OnboardingScaffold(
-      child: Stack(
+      child: FlowFocusShell(
+        enabled: settings.flowFocusLandscapeEnabled,
+        isRunning: controller.runState == RunState.running,
+        childPortrait: Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
@@ -64,16 +87,9 @@ class _HomePageState extends State<HomePage> {
               physics: const ClampingScrollPhysics(),
               clipBehavior: Clip.none,
               children: [
-                _TimerCard(
-                  controller: controller,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ActiveSessionPage(),
-                    ),
-                  ),
-                ),
+                buildPomodoroCard(),
                 const SizedBox(height: 24),
-                const _QuoteCard(),
+                const QuoteBlock(),
                 const SizedBox(height: 24),
                 const _StatsCard(),
               ],
@@ -96,9 +112,20 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
         ],
+        ),
+        childFlowFocus: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: buildPomodoroCard(),
+            ),
+          ),
+        ),
       ),
     );
   }
+
 }
 
 class _HeaderBlock extends StatelessWidget {
@@ -454,42 +481,6 @@ class _CircleIconButton extends StatelessWidget {
             size: 30,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _QuoteCard extends StatelessWidget {
-  const _QuoteCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(
-            Icons.auto_awesome_rounded,
-            color: Colors.white70,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'El foco es un músculo: si no lo usás, se atrofia.',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: AppColors.textPrimary.withValues(alpha: 0.8),
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

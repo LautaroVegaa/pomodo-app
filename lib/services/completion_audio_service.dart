@@ -7,8 +7,10 @@ class CompletionAudioService {
   CompletionAudioService({
     required bool Function() soundsEnabledResolver,
     AudioPlayer? player,
+    bool enableWarmup = true,
   }) : _soundsEnabledResolver = soundsEnabledResolver,
-       _player = player ?? AudioPlayer(playerId: 'completion_audio') {
+       _player = player ?? AudioPlayer(playerId: 'completion_audio'),
+       _enableWarmup = enableWarmup {
     _ensureAudioContext();
     unawaited(_player.setReleaseMode(ReleaseMode.stop));
   }
@@ -18,6 +20,7 @@ class CompletionAudioService {
 
   final bool Function() _soundsEnabledResolver;
   final AudioPlayer _player;
+  final bool _enableWarmup;
   bool _disposed = false;
   bool _debugWarmupRun = false;
 
@@ -77,7 +80,7 @@ class CompletionAudioService {
   }
 
   Future<void> debugWarmupPlayback() async {
-    if (!kDebugMode || _disposed || _debugWarmupRun) return;
+    if (!_enableWarmup || !kDebugMode || _disposed || _debugWarmupRun) return;
     _debugWarmupRun = true;
     debugPrint('[CompletionAudioService] Debug warmup start');
     try {

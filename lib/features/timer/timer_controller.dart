@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../stats/stats_controller.dart';
 import '../../services/completion_audio_service.dart';
 import '../../services/completion_banner_controller.dart';
 import '../../services/notification_service.dart';
@@ -16,12 +17,14 @@ class TimerController extends ChangeNotifier {
     CompletionBannerController? bannerController,
     bool Function()? notificationsEnabledResolver,
     DateTime Function()? nowProvider,
+    StatsController? statsController,
   })  : _selectedMinutes = _normalizeMinutes(initialMinutes),
         _audioService = audioService,
         _notificationService = notificationService,
         _bannerController = bannerController,
         _notificationsEnabledResolver = notificationsEnabledResolver,
-        _nowProvider = nowProvider ?? DateTime.now {
+        _nowProvider = nowProvider ?? DateTime.now,
+        _statsController = statsController {
     _totalSeconds = _selectedMinutes * 60;
     _cachedRemainingSeconds = _totalSeconds;
   }
@@ -38,6 +41,7 @@ class TimerController extends ChangeNotifier {
   final CompletionBannerController? _bannerController;
   final bool Function()? _notificationsEnabledResolver;
   final DateTime Function() _nowProvider;
+  final StatsController? _statsController;
   DateTime? _endTime;
   bool _isAppInForeground = true;
 
@@ -113,12 +117,18 @@ class TimerController extends ChangeNotifier {
   }
 
   void stop() {
+    final bool wasActive =
+        _runState == TimerRunState.running || _runState == TimerRunState.paused;
+    final int elapsedSeconds = wasActive ? _elapsedSecondsSoFar() : 0;
     _timer?.cancel();
     _runState = TimerRunState.idle;
     _cachedRemainingSeconds = _totalSeconds;
     _endTime = null;
     _cancelTimerNotification('stop');
     _notify();
+    if (wasActive) {
+      _recordTimerFocusMinutes(elapsedSeconds);
+    }
   }
 
   void handleLifecycleChange(AppLifecycleState state) {
@@ -200,6 +210,28 @@ class TimerController extends ChangeNotifier {
     unawaited(service.cancelScheduledTimerNotification());
   }
 
+  int _elapsedSecondsSoFar() {
+    final int elapsed = _totalSeconds - remainingSeconds;
+    return elapsed.clamp(0, _totalSeconds);
+  }
+
+  void _recordTimerFocusMinutes(int elapsedSeconds) {
+    final StatsController? stats = _statsController;
+    if (stats == null) {
+      return;
+    }
+    final int minutes = elapsedSeconds ~/ 60;
+    if (minutes <= 0) {
+      return;
+    }
+    stats.recordFocusCompletion(
+      completionTime: _now(),
+      focusMinutes: minutes,
+      countSession: false,
+      includeMinutes: true,
+    );
+  }
+
   void _log(String message) {
     debugPrint('[TimerController] $message');
   }
@@ -213,12 +245,14 @@ class TimerController extends ChangeNotifier {
   }
 
   void _completeTimer() {
+    final int elapsedSeconds = _elapsedSecondsSoFar();
     _runState = TimerRunState.completed;
     _timer?.cancel();
     _endTime = null;
     _cachedRemainingSeconds = 0;
     _cancelTimerNotification('complete');
     _notify();
+    _recordTimerFocusMinutes(elapsedSeconds);
     if (_isAppInForeground) {
       _audioService?.playCompletionCue();
     }

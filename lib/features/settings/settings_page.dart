@@ -7,6 +7,7 @@ import '../../app/pomodoro_scope.dart';
 import '../../app/settings_scope.dart';
 import '../../services/app_blocking/app_blocking_controller.dart';
 import '../app_blocking/app_blocking_page.dart';
+import '../auth/login_entry_page.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../pomodoro/pomodoro_controller.dart';
 import 'settings_controller.dart';
@@ -162,6 +163,14 @@ class _SettingsList extends StatelessWidget {
                   onChanged: settings.setHapticsEnabled,
                 ),
               ),
+              _SettingsRowData(
+                label: 'Flow Focus in landscape',
+                helper: 'Show a distraction-free timer view when you rotate your device.',
+                trailing: _SettingsSwitch(
+                  value: settings.flowFocusLandscapeEnabled,
+                  onChanged: settings.setFlowFocusLandscapeEnabled,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -181,7 +190,22 @@ class _SettingsList extends StatelessWidget {
               ),
             ],
           ),
-          if (auth.canSignOut) ...[
+          if (auth.isGuestSession) ...[
+            const SizedBox(height: 20),
+            _SettingsCard(
+              title: 'Account',
+              rows: [
+                _SettingsRowData(
+                  label: 'Log in',
+                  trailing: Icon(
+                    Icons.login_rounded,
+                    color: AppColors.textPrimary.withValues(alpha: 0.9),
+                  ),
+                  onTap: () => _handleLogin(context),
+                ),
+              ],
+            ),
+          ] else if (auth.canSignOut) ...[
             const SizedBox(height: 20),
             _SettingsCard(
               title: 'Account',
@@ -316,6 +340,79 @@ class _SettingsList extends StatelessWidget {
       auth.clearError();
     }
   }
+
+  void _handleLogin(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const LoginEntryRouteCloser()),
+    );
+  }
+}
+
+class LoginEntryRouteCloser extends StatefulWidget {
+  const LoginEntryRouteCloser({super.key});
+
+  @override
+  State<LoginEntryRouteCloser> createState() => _LoginEntryRouteCloserState();
+}
+
+class _LoginEntryRouteCloserState extends State<LoginEntryRouteCloser> {
+  AuthController? _controller;
+  bool _didPop = false;
+  int? _initialGuestGeneration;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final nextController = AuthScope.of(context);
+    if (_controller == nextController) {
+      return;
+    }
+    _controller?.removeListener(_handleAuthUpdates);
+    _controller = nextController..addListener(_handleAuthUpdates);
+    _initialGuestGeneration = nextController.guestSessionGeneration;
+  }
+
+  @override
+  void dispose() {
+    _controller?.removeListener(_handleAuthUpdates);
+    super.dispose();
+  }
+
+  void _handleAuthUpdates() {
+    final controller = _controller;
+    if (controller == null || !mounted || _didPop) {
+      return;
+    }
+    if (controller.isBusy) {
+      return;
+    }
+    final bool signedIn = controller.user != null;
+    final int baseline = _initialGuestGeneration ?? controller.guestSessionGeneration;
+    final bool guestConfirmed = controller.isGuestSession &&
+        controller.guestSessionGeneration > baseline;
+    if (!controller.canAccessApp || (!signedIn && !guestConfirmed)) {
+      return;
+    }
+    final route = ModalRoute.of(context);
+    if (route?.isCurrent != true) {
+      return;
+    }
+    _didPop = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final navigator = Navigator.of(context);
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const LoginEntryPage();
+  }
 }
 
 class _SettingsCard extends StatelessWidget {
@@ -377,6 +474,7 @@ class _SettingsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final Widget? trailing = data.trailing;
+    final bool hasHelper = (data.helper?.isNotEmpty ?? false);
     return GestureDetector(
       behavior: data.onTap == null ? HitTestBehavior.translucent : HitTestBehavior.opaque,
       onTap: data.onTap,
@@ -385,11 +483,27 @@ class _SettingsRow extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: Text(
-                data.label,
-                style: textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textPrimary.withValues(alpha: 0.7),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    data.label,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: AppColors.textPrimary.withValues(alpha: 0.7),
+                    ),
+                  ),
+                  if (hasHelper)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        data.helper!,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: AppColors.textPrimary.withValues(alpha: 0.5),
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             trailing ??
@@ -413,12 +527,14 @@ class _SettingsRowData {
     this.value,
     this.trailing,
     this.onTap,
+    this.helper,
   });
 
   final String label;
   final String? value;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final String? helper;
 }
 
 class _SettingsSwitch extends StatelessWidget {

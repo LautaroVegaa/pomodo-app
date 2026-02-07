@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_theme.dart';
+import '../../app/quote_scope.dart';
+import '../../app/settings_scope.dart';
 import '../../app/timer_scope.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../settings/settings_page.dart';
 import '../shared/widgets/animated_progress_bar.dart';
 import '../shared/widgets/card_blur.dart';
+import '../shared/widgets/flow_focus_shell.dart';
+import '../shared/widgets/quote_block.dart';
 import 'timer_controller.dart';
+import '../quotes/quote_rotation_controller.dart';
 
 class TimerPage extends StatelessWidget {
   const TimerPage({super.key});
@@ -14,42 +19,63 @@ class TimerPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final TimerController controller = TimerScope.of(context);
+    final settings = SettingsScope.of(context);
+    final quoteController = QuoteScope.of(context);
 
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        Widget buildTimerCard() {
+          return _TimerCardShell(
+            timeText: controller.formattedRemaining,
+            progress: controller.progress,
+            runState: controller.runState,
+            sessionSeed: controller.selectedMinutes,
+            onPrimaryTap: () => _handlePrimaryAction(controller, quoteController),
+            onStopTap: controller.stop,
+          );
+        }
         return OnboardingScaffold(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
-              const _Header(),
-              const SizedBox(height: 24),
-              _TimerCardShell(
-                timeText: controller.formattedRemaining,
-                progress: controller.progress,
-                runState: controller.runState,
-                sessionSeed: controller.selectedMinutes,
-                onPrimaryTap: () => _handlePrimaryAction(controller),
-                onStopTap: controller.stop,
+          child: FlowFocusShell(
+            enabled: settings.flowFocusLandscapeEnabled,
+            isRunning: controller.runState == TimerRunState.running,
+            childPortrait: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                const _Header(),
+                const SizedBox(height: 24),
+                buildTimerCard(),
+                const SizedBox(height: 32),
+                _DurationSelector(
+                  value: controller.selectedMinutes.toDouble(),
+                  enabled: controller.canAdjustDuration,
+                  onChanged: (value) =>
+                      controller.setDurationMinutes(value.round()),
+                ),
+                const SizedBox(height: 32),
+                const QuoteBlock(),
+              ],
+            ),
+            childFlowFocus: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: buildTimerCard(),
+                ),
               ),
-              const SizedBox(height: 32),
-              _DurationSelector(
-                value: controller.selectedMinutes.toDouble(),
-                enabled: controller.canAdjustDuration,
-                onChanged: (value) =>
-                    controller.setDurationMinutes(value.round()),
-              ),
-              const SizedBox(height: 32),
-              const _MotivationalText(),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  void _handlePrimaryAction(TimerController controller) {
+  void _handlePrimaryAction(
+    TimerController controller,
+    QuoteRotationController quoteController,
+  ) {
     switch (controller.runState) {
       case TimerRunState.running:
         controller.pause();
@@ -59,6 +85,7 @@ class TimerPage extends StatelessWidget {
         break;
       case TimerRunState.idle:
       case TimerRunState.completed:
+        quoteController.rotate(reason: 'timer_start');
         controller.start();
         break;
     }
@@ -287,24 +314,6 @@ class _DurationSelector extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _MotivationalText extends StatelessWidget {
-  const _MotivationalText();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'Stay with one thing.',
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: AppColors.textPrimary.withValues(alpha: 0.65),
-              height: 1.4,
-            ),
-        textAlign: TextAlign.center,
       ),
     );
   }

@@ -65,6 +65,10 @@ class _LoginEntryPageState extends State<LoginEntryPage> {
         final bool appleBusy = controller.isProviderBusy(AuthProvider.apple);
         final bool googleBusy = controller.isProviderBusy(AuthProvider.google);
         final bool isBusy = controller.isBusy;
+        final bool guestAccessDisabled = !controller.canUseGuestAccess;
+        final String guestAccessLabel = guestAccessDisabled
+            ? 'Guest access unavailable after signing in'
+            : 'Continue without account';
         return OnboardingScaffold(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,7 +102,7 @@ class _LoginEntryPageState extends State<LoginEntryPage> {
               ),
               const SizedBox(height: 16),
               _EntryButton(
-                label: 'Continue without account',
+                label: guestAccessLabel,
                 muted: true,
                 enabled: !isBusy,
                 onTap: () => controller.continueWithoutAccount(),

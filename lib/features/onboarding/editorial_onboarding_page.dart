@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/app_theme.dart';
-import '../auth/login_entry_page.dart';
+import 'extended_onboarding_flow.dart';
 import 'widgets/onboarding_scaffold.dart';
 
 class EditorialOnboardingPage extends StatefulWidget {
@@ -16,18 +16,14 @@ class _EditorialOnboardingPageState extends State<EditorialOnboardingPage> {
     _EditorialSlideData(
       lines: ['Your attention', 'drifts between', 'too many tabs.'],
       accentWord: 'attention',
-      ctaStyle: _EditorialCtaStyle.arrow,
     ),
     _EditorialSlideData(
       lines: ['Pomodo brings you', 'back to one', 'focused session.'],
       accentWord: 'focused',
-      ctaStyle: _EditorialCtaStyle.arrow,
     ),
     _EditorialSlideData(
       lines: ['Calm work.', 'Quiet progress.', 'Start Pomodo.'],
       accentWord: 'Calm',
-      ctaStyle: _EditorialCtaStyle.button,
-      buttonLabel: 'Start Pomodo',
     ),
   ];
 
@@ -43,7 +39,7 @@ class _EditorialOnboardingPageState extends State<EditorialOnboardingPage> {
 
   void _finishOnboarding() {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const LoginEntryPage()),
+      MaterialPageRoute(builder: (_) => const ExtendedOnboardingFlowPage()),
     );
   }
 
@@ -78,10 +74,13 @@ class _EditorialOnboardingPageState extends State<EditorialOnboardingPage> {
             ),
           ),
           const SizedBox(height: 32),
-          _EditorialCta(
-            style: slide.ctaStyle,
-            label: slide.buttonLabel,
-            onTap: slide.ctaStyle == _EditorialCtaStyle.button ? _finishOnboarding : _handleNext,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _ArrowButton(
+                onTap: _currentIndex == _slides.length - 1 ? _finishOnboarding : _handleNext,
+              ),
+            ],
           ),
         ],
       ),
@@ -158,35 +157,6 @@ class _EditorialSlide extends StatelessWidget {
   }
 }
 
-class _EditorialCta extends StatelessWidget {
-  const _EditorialCta({
-    required this.style,
-    this.label,
-    required this.onTap,
-  });
-
-  final _EditorialCtaStyle style;
-  final String? label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    switch (style) {
-      case _EditorialCtaStyle.arrow:
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            _ArrowButton(onTap: onTap),
-          ],
-        );
-      case _EditorialCtaStyle.button:
-        return Center(
-          child: _FinalButton(label: label ?? '' , onTap: onTap),
-        );
-    }
-  }
-}
-
 class _ArrowButton extends StatelessWidget {
   const _ArrowButton({required this.onTap});
 
@@ -209,46 +179,12 @@ class _ArrowButton extends StatelessWidget {
   }
 }
 
-class _FinalButton extends StatelessWidget {
-  const _FinalButton({required this.label, required this.onTap});
-
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 16),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceMuted.withValues(alpha: 0.9),
-          borderRadius: BorderRadius.circular(26),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-        ),
-      ),
-    );
-  }
-}
-
 class _EditorialSlideData {
   const _EditorialSlideData({
     required this.lines,
     required this.accentWord,
-    required this.ctaStyle,
-    this.buttonLabel,
   });
 
   final List<String> lines;
   final String accentWord;
-  final _EditorialCtaStyle ctaStyle;
-  final String? buttonLabel;
 }
-
-enum _EditorialCtaStyle { arrow, button }

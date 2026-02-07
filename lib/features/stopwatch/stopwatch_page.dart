@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/app_theme.dart';
+import '../../app/quote_scope.dart';
 import '../../app/settings_scope.dart';
 import '../../app/stopwatch_scope.dart';
 import '../onboarding/widgets/onboarding_scaffold.dart';
 import '../settings/settings_page.dart';
-import '../shared/widgets/animated_progress_bar.dart';
 import '../shared/widgets/card_blur.dart';
+import '../shared/widgets/flow_focus_shell.dart';
+import '../shared/widgets/quote_block.dart';
 import 'stopwatch_controller.dart';
+import '../quotes/quote_rotation_controller.dart';
 
 class StopwatchPage extends StatelessWidget {
   const StopwatchPage({super.key});
@@ -17,36 +20,58 @@ class StopwatchPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final StopwatchController controller = StopwatchScope.of(context);
     final settings = SettingsScope.of(context);
+    final quoteController = QuoteScope.of(context);
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        Widget buildStopwatchCard() {
+          return _StopwatchCard(
+            elapsedText: controller.formattedElapsed,
+            runState: controller.runState,
+            onPrimaryTap: () =>
+              _handlePrimary(controller, settings.hapticsEnabled, quoteController),
+            onResetTap: () =>
+                _handleReset(controller, settings.hapticsEnabled),
+          );
+        }
         return OnboardingScaffold(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 8),
-              const _Header(),
-              const SizedBox(height: 24),
-              _StopwatchCard(
-                elapsedText: controller.formattedElapsed,
-                runState: controller.runState,
-                onPrimaryTap: () =>
-                    _handlePrimary(controller, settings.hapticsEnabled),
-                onResetTap: () =>
-                    _handleReset(controller, settings.hapticsEnabled),
+          child: FlowFocusShell(
+            enabled: settings.flowFocusLandscapeEnabled,
+            isRunning: controller.runState == StopwatchRunState.running,
+            childPortrait: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 8),
+                const _Header(),
+                const SizedBox(height: 24),
+                buildStopwatchCard(),
+                const SizedBox(height: 32),
+                const QuoteBlock(),
+              ],
+            ),
+            childFlowFocus: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: buildStopwatchCard(),
+                ),
               ),
-              const SizedBox(height: 32),
-              const _MotivationalText(),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  void _handlePrimary(StopwatchController controller, bool hapticsEnabled) {
+  void _handlePrimary(
+    StopwatchController controller,
+    bool hapticsEnabled,
+    QuoteRotationController quoteController,
+  ) {
     switch (controller.runState) {
       case StopwatchRunState.idle:
+        quoteController.rotate(reason: 'stopwatch_start');
         controller.start();
         if (hapticsEnabled) {
           HapticFeedback.lightImpact();
@@ -125,40 +150,7 @@ class _StopwatchCard extends StatefulWidget {
   State<_StopwatchCard> createState() => _StopwatchCardState();
 }
 
-class _StopwatchCardState extends State<_StopwatchCard>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _progressController;
-
-  @override
-  void initState() {
-    super.initState();
-    _progressController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    );
-    if (widget.runState == StopwatchRunState.running) {
-      _progressController.repeat(reverse: true);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _StopwatchCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.runState == StopwatchRunState.running) {
-      if (!_progressController.isAnimating) {
-        _progressController.repeat(reverse: true);
-      }
-    } else if (oldWidget.runState == StopwatchRunState.running) {
-      _progressController.stop();
-      _progressController.reset();
-    }
-  }
-
-  @override
-  void dispose() {
-    _progressController.dispose();
-    super.dispose();
-  }
+class _StopwatchCardState extends State<_StopwatchCard> {
 
   @override
   Widget build(BuildContext context) {
@@ -213,28 +205,6 @@ class _StopwatchCardState extends State<_StopwatchCard>
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 4,
-            child: AnimatedBuilder(
-              animation: _progressController,
-              builder: (context, _) {
-                final bool isRunning =
-                    widget.runState == StopwatchRunState.running;
-                final double progress = isRunning
-                    ? 0.15 + 0.7 * _progressController.value
-                    : 0.0;
-                return AnimatedProgressBar(
-                  progress: progress,
-                  backgroundColor: Colors.white.withValues(alpha: 0.08),
-                  fillColor: AppColors.accentBlue,
-                  glowColor: AppColors.accentBlue.withValues(alpha: 0.35),
-                  height: 4,
-                  sessionTrigger: widget.runState.index,
-                );
-              },
-            ),
-          ),
           const SizedBox(height: 28),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -273,24 +243,6 @@ class _CircleButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(28),
         ),
         child: Icon(icon, color: Colors.white, size: 30),
-      ),
-    );
-  }
-}
-
-class _MotivationalText extends StatelessWidget {
-  const _MotivationalText();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'Stay with one thing.',
-        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-          color: AppColors.textPrimary.withValues(alpha: 0.65),
-          height: 1.4,
-        ),
-        textAlign: TextAlign.center,
       ),
     );
   }

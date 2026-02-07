@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 enum StopwatchRunState { idle, running, paused }
 
 class StopwatchController extends ChangeNotifier {
-  StopwatchController({DateTime Function()? nowProvider})
-      : _nowProvider = nowProvider ?? DateTime.now;
+  StopwatchController({DateTime Function()? nowProvider, void Function(Duration elapsed)? onFocusRecorded})
+      : _nowProvider = nowProvider ?? DateTime.now,
+        _onFocusRecorded = onFocusRecorded;
 
   final DateTime Function() _nowProvider;
+  final void Function(Duration elapsed)? _onFocusRecorded;
   StopwatchRunState _runState = StopwatchRunState.idle;
   Duration _elapsed = Duration.zero;
   DateTime? _lastStartTime;
@@ -62,11 +64,18 @@ class StopwatchController extends ChangeNotifier {
   }
 
   void reset() {
+    final Duration completed = _currentElapsed();
+    final bool shouldRecord =
+        _runState != StopwatchRunState.idle && completed.inMinutes > 0;
     _ticker?.cancel();
     _elapsed = Duration.zero;
     _lastStartTime = null;
     _runState = StopwatchRunState.idle;
     notifyListeners();
+    final void Function(Duration elapsed)? callback = _onFocusRecorded;
+    if (shouldRecord && callback != null) {
+      callback(completed);
+    }
   }
 
   void handleLifecycleChange(AppLifecycleState state) {
@@ -85,10 +94,11 @@ class StopwatchController extends ChangeNotifier {
   }
 
   Duration _currentElapsed() {
-    if (_lastStartTime == null) {
+    final DateTime? lastStart = _lastStartTime;
+    if (lastStart == null) {
       return _elapsed;
     }
-    final Duration delta = _now().difference(_lastStartTime!);
+    final Duration delta = _now().difference(lastStart);
     return _elapsed + delta;
   }
 

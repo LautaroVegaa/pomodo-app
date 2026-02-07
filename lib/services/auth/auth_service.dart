@@ -83,8 +83,8 @@ class AuthService {
       if (identityToken == null) {
         throw const AuthFailure('apple-missing-token', 'Missing Apple identity token.');
       }
-      final String? authorizationCode = appleCredential.authorizationCode;
-      if (authorizationCode == null || authorizationCode.isEmpty) {
+      final String authorizationCode = appleCredential.authorizationCode;
+      if (authorizationCode.isEmpty) {
         throw const AuthFailure(
           'apple-missing-auth-code',
           'Missing Apple authorization code.',

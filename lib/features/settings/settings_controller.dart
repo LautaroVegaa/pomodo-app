@@ -19,10 +19,13 @@ class SettingsController extends ChangeNotifier {
   bool _hapticsEnabled = ExperienceSettings.defaults.hapticsEnabled;
   bool _soundsEnabled = ExperienceSettings.defaults.soundsEnabled;
   bool _notificationsEnabled = ExperienceSettings.defaults.notificationsEnabled;
+  bool _flowFocusLandscapeEnabled =
+      ExperienceSettings.defaults.flowFocusLandscapeEnabled;
 
   bool get hapticsEnabled => _hapticsEnabled;
   bool get soundsEnabled => _soundsEnabled;
   bool get notificationsEnabled => _notificationsEnabled;
+  bool get flowFocusLandscapeEnabled => _flowFocusLandscapeEnabled;
 
   Future<void> initialize() {
     return _initialization ??= _loadExperience();
@@ -34,6 +37,7 @@ class SettingsController extends ChangeNotifier {
       _hapticsEnabled = settings.hapticsEnabled;
       _soundsEnabled = settings.soundsEnabled;
       _notificationsEnabled = settings.notificationsEnabled;
+      _flowFocusLandscapeEnabled = settings.flowFocusLandscapeEnabled;
       notifyListeners();
       if (_notificationsEnabled) {
         unawaited(_verifyNotificationPermissions());
@@ -69,12 +73,22 @@ class SettingsController extends ChangeNotifier {
     unawaited(_persist());
   }
 
+  void setFlowFocusLandscapeEnabled(bool value) {
+    if (_flowFocusLandscapeEnabled == value) {
+      return;
+    }
+    _flowFocusLandscapeEnabled = value;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
   Future<void> _persist() {
     return _storage.saveExperience(
       ExperienceSettings(
         hapticsEnabled: _hapticsEnabled,
         soundsEnabled: _soundsEnabled,
         notificationsEnabled: _notificationsEnabled,
+        flowFocusLandscapeEnabled: _flowFocusLandscapeEnabled,
       ),
     );
   }

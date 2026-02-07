@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../features/stats/stats_controller.dart';
 import '../features/stopwatch/stopwatch_controller.dart';
 
 class StopwatchScope extends StatefulWidget {
-  const StopwatchScope({super.key, required this.child});
+  const StopwatchScope({super.key, required this.child, required this.statsController});
 
   final Widget child;
+  final StatsController statsController;
 
   static StopwatchController of(BuildContext context) {
     final _StopwatchInherited? inherited =
@@ -26,7 +28,9 @@ class _StopwatchScopeState extends State<StopwatchScope>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _controller = StopwatchController();
+    _controller = StopwatchController(
+      onFocusRecorded: _recordStopwatchSession,
+    );
   }
 
   @override
@@ -44,6 +48,19 @@ class _StopwatchScopeState extends State<StopwatchScope>
   @override
   Widget build(BuildContext context) {
     return _StopwatchInherited(controller: _controller, child: widget.child);
+  }
+
+  void _recordStopwatchSession(Duration elapsed) {
+    final int minutes = elapsed.inMinutes;
+    if (minutes <= 0) {
+      return;
+    }
+    widget.statsController.recordFocusCompletion(
+      completionTime: DateTime.now(),
+      focusMinutes: minutes,
+      countSession: false,
+      includeMinutes: true,
+    );
   }
 }
 

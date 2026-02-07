@@ -5,27 +5,33 @@ class ExperienceSettings {
     required this.hapticsEnabled,
     required this.soundsEnabled,
     required this.notificationsEnabled,
+    required this.flowFocusLandscapeEnabled,
   });
 
   static const ExperienceSettings defaults = ExperienceSettings(
     hapticsEnabled: true,
     soundsEnabled: false,
     notificationsEnabled: true,
+    flowFocusLandscapeEnabled: true,
   );
 
   final bool hapticsEnabled;
   final bool soundsEnabled;
   final bool notificationsEnabled;
+  final bool flowFocusLandscapeEnabled;
 
   ExperienceSettings copyWith({
     bool? hapticsEnabled,
     bool? soundsEnabled,
     bool? notificationsEnabled,
+    bool? flowFocusLandscapeEnabled,
   }) {
     return ExperienceSettings(
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
       soundsEnabled: soundsEnabled ?? this.soundsEnabled,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+      flowFocusLandscapeEnabled:
+          flowFocusLandscapeEnabled ?? this.flowFocusLandscapeEnabled,
     );
   }
 }
@@ -34,6 +40,7 @@ class SettingsStorage {
   static const String _hapticsKey = 'experience_haptics_enabled';
   static const String _soundsKey = 'experience_sounds_enabled';
   static const String _notificationsKey = 'experience_notifications_enabled';
+  static const String _flowFocusKey = 'experience_flow_focus_landscape_enabled';
 
   Future<ExperienceSettings> loadExperience() async {
     try {
@@ -46,6 +53,9 @@ class SettingsStorage {
         notificationsEnabled:
             prefs.getBool(_notificationsKey) ??
             ExperienceSettings.defaults.notificationsEnabled,
+        flowFocusLandscapeEnabled:
+            prefs.getBool(_flowFocusKey) ??
+            ExperienceSettings.defaults.flowFocusLandscapeEnabled,
       );
     } catch (_) {
       return ExperienceSettings.defaults;
@@ -58,6 +68,7 @@ class SettingsStorage {
       await prefs.setBool(_hapticsKey, settings.hapticsEnabled);
       await prefs.setBool(_soundsKey, settings.soundsEnabled);
       await prefs.setBool(_notificationsKey, settings.notificationsEnabled);
+      await prefs.setBool(_flowFocusKey, settings.flowFocusLandscapeEnabled);
     } catch (_) {
       // Persist errors are ignored to keep UX responsive.
     }

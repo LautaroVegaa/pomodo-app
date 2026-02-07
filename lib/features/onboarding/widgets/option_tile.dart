@@ -14,26 +14,42 @@ class OptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color borderColor = Colors.white.withValues(alpha: selected ? 0.85 : 0.25);
-    final Color fillColor = Colors.white.withValues(alpha: selected ? 0.08 : 0.02);
+    final Color baseColor = Colors.white.withValues(alpha: selected ? 0.08 : 0.02);
+    final Color borderColor = Colors.white.withValues(alpha: selected ? 0.35 : 0.08);
+    final TextStyle textStyle = Theme.of(context).textTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: selected ? 0.95 : 0.78),
+          letterSpacing: 0.15,
+        ) ??
+        TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: selected ? 0.95 : 0.78),
+          letterSpacing: 0.15,
+        );
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
+      borderRadius: BorderRadius.circular(24),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(24),
+          color: baseColor,
           border: Border.all(color: borderColor, width: 1.2),
-          color: fillColor,
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.35),
+                    blurRadius: 40,
+                    offset: const Offset(0, 26),
+                  ),
+                ]
+              : null,
         ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-        ),
+        child: Text(label, style: textStyle),
       ),
     );
   }
