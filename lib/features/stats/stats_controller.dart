@@ -107,6 +107,11 @@ class StatsController extends ChangeNotifier {
     bool countSession = true,
     bool includeMinutes = true,
   }) {
+    debugPrint(
+      '[StatsDebug] StatsController#${hashCode} recordFocusCompletion '
+      'minutes=$focusMinutes countSession=$countSession includeMinutes=$includeMinutes'
+      ' timestamp=${completionTime.toIso8601String()}',
+    );
     if (focusMinutes <= 0) {
       return;
     }
@@ -129,6 +134,10 @@ class StatsController extends ChangeNotifier {
   }
 
   void recordFocusElapsedSeconds(int deltaSeconds, {DateTime? referenceTime}) {
+    debugPrint(
+      '[StatsDebug] StatsController#${hashCode} recordFocusElapsedSeconds '
+      'delta=$deltaSeconds timestamp=${(referenceTime ?? _nowProvider()).toIso8601String()}',
+    );
     if (deltaSeconds <= 0 || _activeUserKey == null) {
       return;
     }

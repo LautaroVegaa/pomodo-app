@@ -38,7 +38,7 @@ class StopwatchPage extends StatelessWidget {
           child: FlowFocusShell(
             enabled: settings.flowFocusLandscapeEnabled,
             isRunning: controller.runState == StopwatchRunState.running,
-            childPortrait: Column(
+            childPortraitBuilder: (_) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
@@ -49,7 +49,7 @@ class StopwatchPage extends StatelessWidget {
                 const QuoteBlock(),
               ],
             ),
-            childFlowFocus: Center(
+            childFlowFocusBuilder: (_) => Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: ConstrainedBox(

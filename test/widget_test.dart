@@ -207,8 +207,8 @@ class _FlowFocusHarness extends StatelessWidget {
           body: FlowFocusShell(
             enabled: true,
             isRunning: isRunning.value,
-            childPortrait: const Center(child: Text('Portrait view')),
-            childFlowFocus: const Center(child: Text('Flow Focus view')),
+            childPortraitBuilder: (_) => const Center(child: Text('Portrait view')),
+            childFlowFocusBuilder: (_) => const Center(child: Text('Flow Focus view')),
           ),
           bottomNavigationBar: flowFocusActive
               ? null

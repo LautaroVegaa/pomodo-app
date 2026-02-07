@@ -2,19 +2,22 @@ import 'package:flutter/material.dart';
 
 /// Wraps feature pages to show a distraction-free card when the device is in
 /// landscape, the session is running, and the feature is enabled in settings.
+///
+/// Child builders are invoked lazily so only the visible layout builds,
+/// preventing duplicate controller trees when Flow Focus toggles on/off.
 class FlowFocusShell extends StatelessWidget {
   const FlowFocusShell({
     super.key,
     required this.enabled,
     required this.isRunning,
-    required this.childPortrait,
-    required this.childFlowFocus,
+    required this.childPortraitBuilder,
+    required this.childFlowFocusBuilder,
   });
 
   final bool enabled;
   final bool isRunning;
-  final Widget childPortrait;
-  final Widget childFlowFocus;
+  final WidgetBuilder childPortraitBuilder;
+  final WidgetBuilder childFlowFocusBuilder;
 
   static bool isActive({
     required bool enabled,
@@ -34,8 +37,8 @@ class FlowFocusShell extends StatelessWidget {
           orientation: orientation,
         );
         final Widget child = showFlowFocus
-            ? SizedBox.expand(child: childFlowFocus)
-            : childPortrait;
+            ? SizedBox.expand(child: childFlowFocusBuilder(context))
+            : childPortraitBuilder(context);
         return FlowFocusScope(isActive: showFlowFocus, child: child);
       },
     );

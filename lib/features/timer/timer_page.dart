@@ -39,7 +39,7 @@ class TimerPage extends StatelessWidget {
           child: FlowFocusShell(
             enabled: settings.flowFocusLandscapeEnabled,
             isRunning: controller.runState == TimerRunState.running,
-            childPortrait: Column(
+            childPortraitBuilder: (_) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
@@ -57,7 +57,7 @@ class TimerPage extends StatelessWidget {
                 const QuoteBlock(),
               ],
             ),
-            childFlowFocus: Center(
+            childFlowFocusBuilder: (_) => Center(
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: ConstrainedBox(

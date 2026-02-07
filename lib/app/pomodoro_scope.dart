@@ -58,6 +58,7 @@ class _PomodoroScopeState extends State<PomodoroScope>
       notificationService: widget.notificationService,
       notificationsEnabledResolver: () => settings.notificationsEnabled,
       bannerController: widget.bannerController,
+      pomodoroAutoStartEnabledResolver: () => settings.pomodoroAutoStartEnabled,
     );
     unawaited(_controller.initialize());
   }

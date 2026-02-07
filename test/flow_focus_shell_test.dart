@@ -25,13 +25,13 @@ void main() {
       home: FlowFocusShell(
         enabled: enabled,
         isRunning: isRunning,
-        childPortrait: Column(
+        childPortraitBuilder: (_) => Column(
           children: const [
             Text('Header'),
             Text('Controls'),
           ],
         ),
-        childFlowFocus: const Center(child: Text('FocusCard')),
+        childFlowFocusBuilder: (_) => const Center(child: Text('FocusCard')),
       ),
     );
   }

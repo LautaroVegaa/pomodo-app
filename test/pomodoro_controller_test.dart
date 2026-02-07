@@ -116,6 +116,43 @@ void main() {
         expect(stats.lifetimeSessions, 1);
       });
     });
+
+    test('auto-start can be disabled via settings', () {
+      fakeAsync((async) {
+        final storage = _FakePomodoroStorage();
+        final clock = _TestClock();
+        final controller = PomodoroController(
+          storage: storage,
+          nowProvider: clock.now,
+          pomodoroAutoStartEnabledResolver: () => false,
+        );
+        controller.setFocusMinutes(5);
+        controller.setBreakMinutes(1);
+
+        controller.start();
+        clock.advance(async, const Duration(minutes: 5));
+
+        expect(
+          controller.sessionType,
+          SessionType.breakSession,
+          reason:
+              'runState=${controller.runState} remaining=${controller.remainingSeconds}',
+        );
+        expect(controller.runState, RunState.idle);
+
+        final int breakRemaining = controller.remainingSeconds;
+        clock.advance(async, const Duration(minutes: 1));
+        expect(controller.remainingSeconds, breakRemaining);
+        expect(controller.runState, RunState.idle);
+
+        controller.start();
+        expect(controller.runState, RunState.running);
+
+        clock.advance(async, const Duration(minutes: 1));
+        expect(controller.sessionType, SessionType.focus);
+        expect(controller.runState, RunState.idle);
+      });
+    });
   });
 }
 

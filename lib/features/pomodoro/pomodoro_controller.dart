@@ -26,6 +26,7 @@ class PomodoroController extends ChangeNotifier {
      CompletionBannerController? bannerController,
      bool Function()? notificationsEnabledResolver,
      DateTime Function()? nowProvider,
+    bool Function()? pomodoroAutoStartEnabledResolver,
   }) : _storage = storage ?? PomodoroStorage(),
        _isHapticsEnabled = hapticsEnabledResolver,
        _isSoundsEnabled = soundsEnabledResolver,
@@ -34,7 +35,8 @@ class PomodoroController extends ChangeNotifier {
        _notificationService = notificationService,
        _bannerController = bannerController,
        _notificationsEnabledResolver = notificationsEnabledResolver,
-       _nowProvider = nowProvider ?? DateTime.now;
+      _nowProvider = nowProvider ?? DateTime.now,
+      _isPomodoroAutoStartEnabled = pomodoroAutoStartEnabledResolver;
 
   final PomodoroStorage _storage;
   Future<void>? _initialization;
@@ -46,6 +48,7 @@ class PomodoroController extends ChangeNotifier {
   final CompletionBannerController? _bannerController;
   final bool Function()? _notificationsEnabledResolver;
   final DateTime Function() _nowProvider;
+  final bool Function()? _isPomodoroAutoStartEnabled;
 
   static const int _focusMin = 5;
   static const int _focusMax = 90;
@@ -71,9 +74,15 @@ class PomodoroController extends ChangeNotifier {
   bool _isCurrentBreakLong = false;
   DateTime? _endTime;
   bool _isAppInForeground = true;
-  DateTime? _lastFocusStatTick;
+  DateTime? _lastFocusStatsSampleAt;
+  int? _lastFocusStatsRemainingSeconds;
 
   Timer? _timer;
+
+  void _stopTimer() {
+    _timer?.cancel();
+    _timer = null;
+  }
 
   SessionType get sessionType => _sessionType;
   RunState get runState => _runState;
@@ -114,7 +123,10 @@ class PomodoroController extends ChangeNotifier {
     _cachedRemainingSeconds = _totalSeconds;
     _endTime = _now().add(Duration(seconds: _cachedRemainingSeconds));
     _runState = RunState.running;
-    _lastFocusStatTick = _sessionType == SessionType.focus ? _now() : null;
+    _lastFocusStatsSampleAt =
+      _sessionType == SessionType.focus ? _now() : null;
+    _lastFocusStatsRemainingSeconds =
+      _sessionType == SessionType.focus ? _totalSeconds : null;
     _cancelPomodoroNotification('start');
     _notify();
     _schedulePomodoroNotification('start');
@@ -125,12 +137,17 @@ class PomodoroController extends ChangeNotifier {
     if (_runState != RunState.running) return;
     _cachedRemainingSeconds = remainingSeconds;
     _endTime = null;
+    if (_sessionType == SessionType.focus) {
+      _recordFocusElapsedSinceLastSample();
+    }
     _runState = RunState.paused;
-    _timer?.cancel();
+    _stopTimer();
     _cancelPomodoroNotification('pause');
     _notify();
     if (_sessionType == SessionType.focus) {
       _flushFocusProgress();
+      _lastFocusStatsSampleAt = _now();
+      _lastFocusStatsRemainingSeconds = _cachedRemainingSeconds;
     }
   }
 
@@ -138,7 +155,10 @@ class PomodoroController extends ChangeNotifier {
     if (_runState != RunState.paused) return;
     _endTime = _now().add(Duration(seconds: _cachedRemainingSeconds));
     _runState = RunState.running;
-    _lastFocusStatTick = _sessionType == SessionType.focus ? _now() : null;
+    _lastFocusStatsSampleAt =
+      _sessionType == SessionType.focus ? _now() : null;
+    _lastFocusStatsRemainingSeconds =
+      _sessionType == SessionType.focus ? _cachedRemainingSeconds : null;
     _cancelPomodoroNotification('resume');
     _notify();
     _schedulePomodoroNotification('resume');
@@ -164,7 +184,7 @@ class PomodoroController extends ChangeNotifier {
   }
 
   void resetToIdleFocus() {
-    _timer?.cancel();
+    _stopTimer();
     _cancelPomodoroNotification('reset');
     _sessionType = SessionType.focus;
     _runState = RunState.idle;
@@ -175,7 +195,8 @@ class PomodoroController extends ChangeNotifier {
     _isCurrentBreakLong = false;
     _endTime = null;
     _flushFocusProgress();
-    _lastFocusStatTick = null;
+    _lastFocusStatsSampleAt = null;
+    _lastFocusStatsRemainingSeconds = null;
     _notify();
   }
 
@@ -190,7 +211,7 @@ class PomodoroController extends ChangeNotifier {
     if (state == AppLifecycleState.paused ||
       state == AppLifecycleState.inactive) {
       if (_runState == RunState.running && _endTime != null) {
-        _timer?.cancel();
+        _stopTimer();
         _schedulePomodoroNotification('lifecycle_${state.name}');
       }
     }
@@ -198,21 +219,26 @@ class PomodoroController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _stopTimer();
     _cancelPomodoroNotification('dispose');
     super.dispose();
   }
 
   void _ensureTimer() {
-    _timer?.cancel();
-    if (_runState != RunState.running) return;
+    if (_runState != RunState.running) {
+      _stopTimer();
+      return;
+    }
+    if (_timer != null) {
+      return;
+    }
     _timer = Timer.periodic(_tick, (_) => _handleTick());
   }
 
   void _handleTick() {
-    _trackFocusElapsed();
+    _recordFocusElapsedSinceLastSample();
     if (_runState != RunState.running) {
-      _timer?.cancel();
+      _stopTimer();
       return;
     }
     final int seconds = remainingSeconds;
@@ -225,7 +251,7 @@ class PomodoroController extends ChangeNotifier {
   }
 
   void _reconcileElapsedTime() {
-    _trackFocusElapsed();
+    _recordFocusElapsedSinceLastSample();
     if (_runState != RunState.running) {
       _notify();
       return;
@@ -242,7 +268,7 @@ class PomodoroController extends ChangeNotifier {
   }
 
   void _handleSessionComplete() {
-    _timer?.cancel();
+    _stopTimer();
     _cancelPomodoroNotification('session_complete');
     _cachedRemainingSeconds = 0;
     _endTime = null;
@@ -258,21 +284,33 @@ class PomodoroController extends ChangeNotifier {
     if (completedFocus) {
       final int completedMinutes = (_totalSeconds ~/ 60).clamp(0, 1440).toInt();
       _flushFocusProgress();
-      _lastFocusStatTick = null;
+      _lastFocusStatsSampleAt = null;
+      _lastFocusStatsRemainingSeconds = null;
+      debugPrint(
+        '[StatsDebug] PomodoroController#${hashCode} recordFocusCompletion '
+        'minutes=$completedMinutes completedFocus=$completedFocus',
+      );
       _statsController?.recordFocusCompletion(
         completionTime: _now(),
         focusMinutes: completedMinutes,
         includeMinutes: false,
       );
       _cycleCount += 1;
-      _beginSession(SessionType.breakSession);
+      _beginSession(
+        SessionType.breakSession,
+        autoStart: _shouldAutoStartNextSession(),
+      );
     } else {
-      _lastFocusStatTick = null;
-      _beginSession(SessionType.focus);
+      _lastFocusStatsSampleAt = null;
+      _lastFocusStatsRemainingSeconds = null;
+      _beginSession(
+        SessionType.focus,
+        autoStart: _shouldAutoStartNextSession(),
+      );
     }
   }
 
-  void _beginSession(SessionType type) {
+  void _beginSession(SessionType type, {bool autoStart = true}) {
     final bool nextIsLongBreak =
         type == SessionType.breakSession ? _shouldUseLongBreak() : false;
     _isCurrentBreakLong = nextIsLongBreak;
@@ -281,18 +319,38 @@ class PomodoroController extends ChangeNotifier {
     _sessionType = type;
     _totalSeconds = targetDuration;
     _cachedRemainingSeconds = targetDuration;
-    _endTime = _now().add(Duration(seconds: targetDuration));
-    _runState = RunState.running;
+    if (autoStart) {
+      _endTime = _now().add(Duration(seconds: targetDuration));
+      _runState = RunState.running;
+    } else {
+      _endTime = null;
+      _runState = RunState.idle;
+      _stopTimer();
+    }
     _cancelPomodoroNotification('begin_session');
     _notify();
-    _schedulePomodoroNotification('begin_session');
-    _ensureTimer();
-    if (_sessionType == SessionType.focus) {
-      _lastFocusStatTick = _now();
+    if (autoStart) {
+      _schedulePomodoroNotification('begin_session');
+      _ensureTimer();
+      if (_sessionType == SessionType.focus) {
+        _lastFocusStatsSampleAt = _now();
+        _lastFocusStatsRemainingSeconds = _totalSeconds;
+      } else {
+        _flushFocusProgress();
+        _lastFocusStatsSampleAt = null;
+        _lastFocusStatsRemainingSeconds = null;
+      }
     } else {
-      _flushFocusProgress();
-      _lastFocusStatTick = null;
+      if (_sessionType == SessionType.breakSession) {
+        _flushFocusProgress();
+      }
+      _lastFocusStatsSampleAt = null;
+      _lastFocusStatsRemainingSeconds = null;
     }
+  }
+
+  bool _shouldAutoStartNextSession() {
+    return _isPomodoroAutoStartEnabled?.call() ?? true;
   }
 
   void _applyConfig(PomodoroConfig config) {
@@ -425,20 +483,52 @@ class PomodoroController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _trackFocusElapsed() {
-    final StatsController? stats = _statsController;
-    if (stats == null ||
-        _sessionType != SessionType.focus ||
-        _runState != RunState.running) {
+  void _recordFocusElapsedSinceLastSample({DateTime? sampleTime}) {
+    final DateTime now = sampleTime ?? _now();
+    if (_sessionType != SessionType.focus) {
+      _lastFocusStatsSampleAt = null;
+      _lastFocusStatsRemainingSeconds = null;
       return;
     }
-    final DateTime now = _now();
-    final DateTime lastTick = _lastFocusStatTick ?? now;
-    final int delta = now.difference(lastTick).inSeconds;
-    _lastFocusStatTick = now;
-    if (delta > 0) {
-      stats.recordFocusElapsedSeconds(delta, referenceTime: now);
+
+    final int currentRemaining = _computeRemainingSeconds();
+    if (_runState != RunState.running) {
+      _lastFocusStatsSampleAt = now;
+      _lastFocusStatsRemainingSeconds = currentRemaining;
+      return;
     }
+    final DateTime? lastSample = _lastFocusStatsSampleAt;
+    final int elapsedByTime =
+      lastSample == null ? 0 : now.difference(lastSample).inSeconds;
+    final int? lastRemaining = _lastFocusStatsRemainingSeconds;
+    int elapsedByProgress =
+      lastRemaining == null ? 0 : lastRemaining - currentRemaining;
+    if (elapsedByProgress < 0) {
+      elapsedByProgress = 0;
+    }
+    final int delta;
+    if (elapsedByTime <= 0 && elapsedByProgress <= 0) {
+      delta = 0;
+    } else if (elapsedByTime <= 0) {
+      delta = elapsedByProgress;
+    } else if (elapsedByProgress <= 0) {
+      delta = elapsedByTime;
+    } else {
+      delta = elapsedByTime < elapsedByProgress
+          ? elapsedByTime
+          : elapsedByProgress;
+    }
+    _lastFocusStatsSampleAt = now;
+    _lastFocusStatsRemainingSeconds = currentRemaining;
+    final StatsController? stats = _statsController;
+    if (delta <= 0 || stats == null) {
+      return;
+    }
+    debugPrint(
+      '[StatsDebug] PomodoroController#${hashCode} trackElapsed delta=$delta '
+      'flowFocus=unknown',
+    );
+    stats.recordFocusElapsedSeconds(delta, referenceTime: now);
   }
 
   void _flushFocusProgress() {

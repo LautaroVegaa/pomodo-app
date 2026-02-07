@@ -75,7 +75,7 @@ class _HomePageState extends State<HomePage> {
       child: FlowFocusShell(
         enabled: settings.flowFocusLandscapeEnabled,
         isRunning: controller.runState == RunState.running,
-        childPortrait: Stack(
+        childPortraitBuilder: (_) => Stack(
         clipBehavior: Clip.none,
         children: [
           Positioned.fill(
@@ -113,7 +113,7 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
         ),
-        childFlowFocus: Center(
+        childFlowFocusBuilder: (_) => Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: ConstrainedBox(

@@ -21,11 +21,14 @@ class SettingsController extends ChangeNotifier {
   bool _notificationsEnabled = ExperienceSettings.defaults.notificationsEnabled;
   bool _flowFocusLandscapeEnabled =
       ExperienceSettings.defaults.flowFocusLandscapeEnabled;
+    bool _pomodoroAutoStartEnabled =
+      ExperienceSettings.defaults.pomodoroAutoStartEnabled;
 
   bool get hapticsEnabled => _hapticsEnabled;
   bool get soundsEnabled => _soundsEnabled;
   bool get notificationsEnabled => _notificationsEnabled;
   bool get flowFocusLandscapeEnabled => _flowFocusLandscapeEnabled;
+    bool get pomodoroAutoStartEnabled => _pomodoroAutoStartEnabled;
 
   Future<void> initialize() {
     return _initialization ??= _loadExperience();
@@ -38,6 +41,7 @@ class SettingsController extends ChangeNotifier {
       _soundsEnabled = settings.soundsEnabled;
       _notificationsEnabled = settings.notificationsEnabled;
       _flowFocusLandscapeEnabled = settings.flowFocusLandscapeEnabled;
+      _pomodoroAutoStartEnabled = settings.pomodoroAutoStartEnabled;
       notifyListeners();
       if (_notificationsEnabled) {
         unawaited(_verifyNotificationPermissions());
@@ -82,6 +86,13 @@ class SettingsController extends ChangeNotifier {
     unawaited(_persist());
   }
 
+  void setPomodoroAutoStartEnabled(bool value) {
+    if (_pomodoroAutoStartEnabled == value) return;
+    _pomodoroAutoStartEnabled = value;
+    notifyListeners();
+    unawaited(_persist());
+  }
+
   Future<void> _persist() {
     return _storage.saveExperience(
       ExperienceSettings(
@@ -89,6 +100,7 @@ class SettingsController extends ChangeNotifier {
         soundsEnabled: _soundsEnabled,
         notificationsEnabled: _notificationsEnabled,
         flowFocusLandscapeEnabled: _flowFocusLandscapeEnabled,
+        pomodoroAutoStartEnabled: _pomodoroAutoStartEnabled,
       ),
     );
   }

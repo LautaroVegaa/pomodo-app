@@ -55,6 +55,10 @@ class _StopwatchScopeState extends State<StopwatchScope>
     if (minutes <= 0) {
       return;
     }
+    debugPrint(
+      '[StatsDebug] StopwatchController#${_controller.hashCode} recordFocusCompletion '
+      'minutes=$minutes',
+    );
     widget.statsController.recordFocusCompletion(
       completionTime: DateTime.now(),
       focusMinutes: minutes,

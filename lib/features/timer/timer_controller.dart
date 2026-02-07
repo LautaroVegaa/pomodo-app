@@ -224,6 +224,9 @@ class TimerController extends ChangeNotifier {
     if (minutes <= 0) {
       return;
     }
+    debugPrint(
+      '[StatsDebug] TimerController#${hashCode} recordFocusCompletion minutes=$minutes',
+    );
     stats.recordFocusCompletion(
       completionTime: _now(),
       focusMinutes: minutes,

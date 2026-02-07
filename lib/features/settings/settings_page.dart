@@ -171,6 +171,14 @@ class _SettingsList extends StatelessWidget {
                   onChanged: settings.setFlowFocusLandscapeEnabled,
                 ),
               ),
+              _SettingsRowData(
+                label: 'Auto-start Pomodoro',
+                helper: 'Automatically starts the next focus/break cycle.',
+                trailing: _SettingsSwitch(
+                  value: settings.pomodoroAutoStartEnabled,
+                  onChanged: settings.setPomodoroAutoStartEnabled,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
