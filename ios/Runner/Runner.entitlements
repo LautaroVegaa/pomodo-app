@@ -10,7 +10,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.example.pomodoApp</string>
+		<string>group.com.lautarovega.pomodoflow</string>
 	</array>
 </dict>
 </plist>

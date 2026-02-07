@@ -16,7 +16,7 @@ final class AppBlockingChannel {
   private let defaults: UserDefaults
   private let logger = Logger(subsystem: "pomodo.app", category: "AppBlocking")
   private let pickerPresenter = PickerPresenter()
-  private let appGroupIdentifier = "group.com.example.pomodoApp"
+  private let appGroupIdentifier = "group.com.lautarovega.pomodoflow"
 
   init(messenger: FlutterBinaryMessenger) {
     channel = FlutterMethodChannel(name: "pomodo/app_blocking", binaryMessenger: messenger)

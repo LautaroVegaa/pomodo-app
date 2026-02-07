@@ -8,7 +8,7 @@
 PRODUCT_NAME = pomodo_app
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.pomodoApp
+PRODUCT_BUNDLE_IDENTIFIER = com.lautarovega.pomodoflow
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.example. All rights reserved.

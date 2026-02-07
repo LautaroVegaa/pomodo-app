@@ -63,6 +63,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '495779418968',
     projectId: 'pomodo-app-c2749',
     storageBucket: 'pomodo-app-c2749.firebasestorage.app',
-    iosBundleId: 'com.example.pomodoApp',
+    iosBundleId: 'com.lautarovega.pomodoflow',
   );
 }
